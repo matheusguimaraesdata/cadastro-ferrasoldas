@@ -9,6 +9,13 @@ export type ResultadoEnvio =
 
 const LOGO_CID = 'logo-ferrasoldas@ferrasoldas';
 
+type AnexoResend = {
+  filename: string;
+  content: string;
+  contentType: string;
+  contentId: string;
+};
+
 function exigir(variavel: string): string {
   const valor = process.env[variavel];
 
@@ -53,7 +60,9 @@ function formatarValorVenda(valor: string): string {
 }
 
 function obterIdentificacao(dados: DadosCadastro): string {
-  return dados.tipoPessoa === 'PJ' ? dados.razaoSocial : dados.nome;
+  return dados.tipoPessoa === 'PJ'
+    ? dados.razaoSocial ?? ''
+    : dados.nome ?? '';
 }
 
 function obterDocumento(dados: DadosCadastro): {
@@ -80,13 +89,13 @@ function obterDocumentoSecundario(dados: DadosCadastro): {
   if (dados.tipoPessoa === 'PJ') {
     return {
       rotulo: 'Inscrição Estadual',
-      valor: dados.inscricaoEstadual,
+      valor: dados.inscricaoEstadual ?? '',
     };
   }
 
   return {
     rotulo: 'RG',
-    valor: dados.rg,
+    valor: dados.rg ?? '',
   };
 }
 
@@ -897,6 +906,13 @@ async function enviarComResend(
   const fs = await import('node:fs/promises');
   const logo = await fs.readFile(caminhoLogo);
 
+  const anexoLogo: AnexoResend = {
+    filename: 'logo-ferrasoldas.png',
+    content: logo.toString('base64'),
+    contentType: 'image/png',
+    contentId: LOGO_CID,
+  };
+
   const { data, error } = await resend.emails.send({
     from: exigir('EMAIL_REMETENTE'),
     to: exigir('EMAIL_DESTINO'),
@@ -904,14 +920,7 @@ async function enviarComResend(
     subject: assunto,
     html,
     text: texto,
-    attachments: [
-      {
-        filename: 'logo-ferrasoldas.png',
-        content: logo.toString('base64'),
-        contentType: 'image/png',
-        contentId: LOGO_CID,
-      },
-    ],
+    attachments: [anexoLogo],
   });
 
   if (error) {

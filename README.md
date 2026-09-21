@@ -1,107 +1,425 @@
-# Cadastro Ferrasoldas (CNPJ / CPF)
+# Cadastro Ferrasoldas — CNPJ / CPF
 
-Formulário de cadastro de cliente da Ferrasoldas. Substitui o Google Forms usado
-hoje pelo setor comercial. Cada envio válido vira um e-mail formatado entregue em
-`pagamento@ferrasoldas.com.br`, com `Reply-To` apontando para o e-mail do cliente —
-o financeiro responde direto da caixa de entrada.
+Sistema de cadastro de clientes da **Ferrasoldas Comércio e Representações Ltda.**
 
-Nada é gravado em banco de dados. O formulário transporta os dados e encerra.
+O projeto substitui o formulário utilizado anteriormente pelo setor comercial e centraliza o processo de abertura de cadastro em uma aplicação web própria.
+
+Cada cadastro válido é enviado por e-mail ao setor responsável. O endereço informado pelo cliente é configurado como `Reply-To`, permitindo que o financeiro responda diretamente ao cliente a partir da caixa de entrada.
+
+O sistema **não utiliza banco de dados**. Os dados são validados, processados e encaminhados ao serviço de e-mail.
+
+---
+
+## Stack
+
+* **Next.js** — aplicação web e API Routes
+* **React** — interface do formulário
+* **TypeScript** — tipagem e segurança durante o desenvolvimento
+* **Zod** — validação e definição do schema dos dados
+* **React Hook Form** — gerenciamento do formulário
+* **Nodemailer** — envio via SMTP
+* **Resend** — alternativa para envio transacional
+* **Vitest** — testes automatizados
+* **CSS** — interface responsiva e identidade visual
+* **Vercel** — hospedagem e deploy
+
+---
+
+## Funcionalidades
+
+* Cadastro de Pessoa Física e Pessoa Jurídica
+* Validação de CPF
+* Validação de CNPJ, incluindo o novo formato alfanumérico
+* Validação de telefone e CEP
+* Máscaras durante o preenchimento
+* Cadastro de referências comerciais
+* Validação no cliente e no servidor
+* Proteção contra envios automatizados
+* Limitação de requisições por IP
+* Envio de e-mail em HTML
+* Versão alternativa do e-mail em texto simples
+* Logo da Ferrasoldas incorporado ao e-mail
+* `Reply-To` direcionado ao e-mail informado pelo cliente
+* Suporte a SMTP ou Resend
+* Interface responsiva
+* Testes automatizados das principais regras de negócio
+
+---
 
 ## Como rodar
 
+Instale as dependências:
+
 ```bash
 npm install
-cp .env.local.example .env.local   # preencha as variáveis
-npm run dev                        # http://localhost:3000
-npm test                           # testes
 ```
+
+Crie o arquivo de ambiente:
+
+```bash
+cp .env.local.example .env.local
+```
+
+Preencha as variáveis de ambiente e execute:
+
+```bash
+npm run dev
+```
+
+A aplicação estará disponível em:
+
+```text
+http://localhost:3000
+```
+
+Para executar os testes:
+
+```bash
+npm test
+```
+
+Para validar o build de produção:
+
+```bash
+npm run build
+```
+
+---
 
 ## Variáveis de ambiente
 
-| Variável | Para que serve |
-| --- | --- |
-| `EMAIL_DESTINO` | Caixa que recebe os cadastros |
-| `EMAIL_REMETENTE` | Remetente no formato `Nome <endereco@dominio>` |
-| `EMAIL_PROVEDOR` | `smtp` ou `resend` |
-| `RESEND_API_KEY` | Só com `EMAIL_PROVEDOR=resend` |
-| `SMTP_HOST`, `SMTP_PORTA`, `SMTP_SEGURO`, `SMTP_USUARIO`, `SMTP_SENHA` | Só com `EMAIL_PROVEDOR=smtp` |
+| Variável          | Descrição                            |
+| ----------------- | ------------------------------------ |
+| `EMAIL_DESTINO`   | Caixa que recebe os cadastros        |
+| `EMAIL_REMETENTE` | Remetente do e-mail                  |
+| `EMAIL_PROVEDOR`  | `smtp`                               |
+| `SMTP_HOST`       | Servidor SMTP                        |
+| `SMTP_PORTA`      | Porta do servidor SMTP               |
+| `SMTP_SEGURO`     | Define se a conexão SMTP utiliza TLS |
+| `SMTP_USUARIO`    | Usuário da conta SMTP                |
+| `SMTP_SENHA`      | Senha da conta SMTP                  |
 
-### Escolhendo o provedor
+### Exemplo
 
-**SMTP** usa a conta de e-mail que a empresa já tem. É o caminho mais curto quando
-não há acesso ao DNS do domínio. Ponto de atenção: alguns provedores exigem que o
-`EMAIL_REMETENTE` seja exatamente a conta autenticada em `SMTP_USUARIO`, senão o
-envio é rejeitado.
+```env
+EMAIL_PROVEDOR=smtp
 
-**Resend** entrega melhor e dá visibilidade de logs e bounces, mas exige verificar
-o domínio no painel (registros SPF e DKIM no DNS de `ferrasoldas.com.br`) antes de
-enviar com um remetente `@ferrasoldas.com.br`. Trocar de um para o outro é só mudar
-`EMAIL_PROVEDOR` e as credenciais — nenhum outro arquivo muda.
+EMAIL_DESTINO=pagamento@ferrasoldas.com.br
+EMAIL_REMETENTE=Ferrasoldas <seu-email@ferrasoldas.com.br>
+
+SMTP_HOST=smtp.seu-provedor.com
+SMTP_PORTA=465
+SMTP_SEGURO=true
+SMTP_USUARIO=seu-email@ferrasoldas.com.br
+SMTP_SENHA=sua-senha
+```
+
+> As credenciais reais devem permanecer somente no ambiente local ou nas variáveis de ambiente da Vercel. Nunca devem ser versionadas no Git.
+
+---
+
+## Escolha do provedor de e-mail
+
+### SMTP
+
+Utiliza a conta de e-mail já existente na empresa.
+
+É uma alternativa simples quando a estrutura de e-mail já está funcionando e não é necessário utilizar um serviço transacional externo.
+
+Dependendo do provedor, o endereço definido em `EMAIL_REMETENTE` precisa corresponder à conta autenticada em `SMTP_USUARIO`.
+
+
+---
 
 ## Arquitetura
 
-O caminho de um envio:
+O fluxo principal de um cadastro é:
 
+```text
+FormularioCadastro
+        │
+        ├── React Hook Form
+        │
+        └── Zod
+             │
+             ▼
+       POST /api/cadastro
+             │
+             ├── Rate limit
+             │
+             ├── Validação do schema
+             │
+             ├── Honeypot
+             │
+             └── enviarCadastro()
+                    │
+                    ├── SMTP + Nodemailer
+                    │
+                    └── Resend
 ```
-FormularioCadastro (cliente)
-  └─ react-hook-form + zodResolver  ← valida para dar retorno imediato
-       └─ POST /api/cadastro
-            ├─ verificarLimite(IP)         → 429 se estourar
-            ├─ schemaCadastro.safeParse()  → 400 com erro por campo
-            ├─ honeypot preenchido         → 200 silencioso, sem enviar
-            └─ enviarCadastro()            → 502 se o provedor falhar
-                 └─ Resend ou Nodemailer
+
+O mesmo schema definido em `lib/schema.ts` é utilizado no cliente e no servidor.
+
+A validação no cliente melhora a experiência de preenchimento, mas a validação do servidor é a responsável por garantir que requisições externas também sejam verificadas.
+
+Isso é importante porque a API pode ser chamada diretamente sem utilizar a interface do formulário.
+
+---
+
+## Organização do projeto
+
+```text
+cadastro-ferrasoldas/
+│
+├── app/
+│   ├── api/
+│   │   └── cadastro/
+│   │       └── route.ts
+│   │
+│   └── ...
+│
+├── components/
+│   └── FormularioCadastro.tsx
+│
+├── lib/
+│   ├── email.ts
+│   ├── mascaras.ts
+│   ├── rate-limit.ts
+│   ├── schema.ts
+│   └── validadores.ts
+│
+├── public/
+│   └── logo-ferrasoldas.png
+│
+├── tests/
+│   ├── api-cadastro.test.ts
+│   ├── mascaras.test.ts
+│   ├── schema.test.ts
+│   └── validadores.test.ts
+│
+├── .env.local.example
+├── package.json
+└── README.md
 ```
 
-O mesmo schema Zod (`lib/schema.ts`) roda no cliente e no servidor. Validação de
-cliente é experiência de uso; a de servidor é a que importa, porque a rota aceita
-qualquer requisição, inclusive `curl`.
+---
 
-## Decisões que valem explicação
+## Envio de e-mail
 
-**CNPJ alfanumérico.** Desde julho de 2026 a Receita emite CNPJ com letras nas 12
-primeiras posições (IN RFB 2.229/2024). O dígito verificador continua em módulo 11
-com os pesos de sempre; muda só a conversão do caractere, que passa a ser
-`ASCII(c) - 48`. Como `'0'` vale 48, os dígitos 0-9 mantêm seu valor e o algoritmo
-segue validando todo CNPJ antigo. Consequência prática: o campo não pode ser
-numérico e regex com `\d` nas 12 primeiras posições recusa documento válido.
-A implementação está em `lib/validadores.ts` e é coberta pelo exemplo oficial
-`12.ABC.345/01DE-35`.
+O e-mail enviado pelo sistema possui duas versões:
 
-**Máscara não é validação.** `lib/mascaras.ts` só formata enquanto a pessoa digita.
-Quem decide se o documento existe é o dígito verificador.
+* HTML, para clientes de e-mail com suporte a conteúdo formatado;
+* texto simples, utilizado como alternativa de compatibilidade.
 
-**Anti-spam sem CAPTCHA.** Um campo honeypot fora da vista e do foco, mais limite de
-5 envios por IP a cada 10 minutos. O honeypot preenchido responde 200 sem enviar
-nada — bot que recebe erro tenta de novo, bot que recebe sucesso vai embora.
+O HTML utiliza a identidade visual da Ferrasoldas, com:
 
-**Limite de envio em memória.** Em serverless o estado vive por instância, então o
-limite reduz abuso casual mas não é uma barreira distribuída. Se o formulário virar
-alvo, trocar o `Map` de `lib/rate-limit.ts` por Upstash Redis mantendo a mesma
-assinatura de `verificarLimite` resolve sem tocar na rota.
+* amarelo `#f4e500`;
+* preto `#111111`;
+* grafite `#242424`;
+* fundo claro;
+* informações agrupadas por seção;
+* referências comerciais em tabela;
+* identificação do cliente;
+* data e horário do recebimento.
 
-**LGPD.** O formulário coleta CPF, RG e endereço, que são dado pessoal. A finalidade
-está declarada na própria página e nada é persistido aqui — o dado só transita até a
-caixa do financeiro, o que reduz a superfície de guarda. O que ficar na caixa de
-e-mail passa a ser responsabilidade da política interna da empresa.
+O logo é incorporado ao e-mail utilizando uma imagem inline (`CID`), evitando dependência de uma URL pública da aplicação.
 
-## Deploy na Vercel
+Isso permite que o e-mail funcione mesmo antes da publicação do sistema em um domínio próprio.
 
-1. Suba o repositório e importe o projeto na Vercel.
-2. Em *Settings → Environment Variables*, cadastre as variáveis do `.env.local.example`
-   em Production e Preview. Nenhuma delas tem prefixo `NEXT_PUBLIC_`, então nada vai
-   para o navegador.
-3. Faça o deploy e envie um cadastro de teste antes de divulgar o link.
+---
 
-Se o envio falhar em produção, a rota responde 502 e registra a mensagem do provedor
-no log da função — é lá que aparece autenticação SMTP recusada ou domínio não
-verificado no Resend.
+## Assunto dos e-mails
 
-## Testes
+O assunto é gerado automaticamente de acordo com o tipo de cadastro.
 
+Exemplo:
+
+```text
+Novo Cadastro CNPJ - Ferrasoldas Comércio Ltda. - Vendedor João
 ```
-tests/validadores.test.ts   dígito verificador de CPF e CNPJ, telefone, CEP, referências
-tests/mascaras.test.ts      formatação de documento, telefone, CEP, moeda
-tests/schema.test.ts        campos obrigatórios, opcionais, mínimo de 3 referências, honeypot
-tests/api-cadastro.test.ts  200, 400 por campo, 429, 502, corpo inválido
+
+O endereço informado pelo cliente é utilizado no campo:
+
+```text
+Reply-To
 ```
+
+Dessa forma, ao clicar em **Responder**, o financeiro pode responder diretamente ao cliente.
+
+---
+
+Validação de documentos
+CPF
+
+O CPF é validado utilizando seus dígitos verificadores.
+
+A máscara utilizada durante o preenchimento é independente da validação. A máscara apenas melhora a apresentação do documento enquanto o usuário digita.
+
+CNPJ
+
+O sistema também considera o novo formato de CNPJ alfanumérico.
+
+A partir de julho de 2026, novos CNPJs podem utilizar letras nas primeiras posições do identificador, mantendo o cálculo dos dígitos verificadores pelo algoritmo de módulo 11.
+
+A implementação está concentrada em:
+
+lib/validadores.ts
+
+O formato utilizado nos testes inclui:
+
+12.ABC.345/01DE-35
+
+A aplicação não trata o CNPJ como um número. O documento é manipulado como string para permitir tanto os formatos tradicionais quanto os alfanuméricos.
+
+Máscaras e validação
+
+A aplicação separa formatação de validação.
+
+O arquivo:
+
+lib/mascaras.ts
+
+é responsável apenas pela apresentação dos dados durante a digitação.
+
+Já:
+
+lib/validadores.ts
+
+contém as regras responsáveis por verificar os documentos e demais dados.
+
+Essa separação evita que uma máscara seja confundida com uma validação real.
+
+Proteção contra spam
+
+O formulário utiliza duas camadas simples de proteção.
+
+Honeypot
+
+Existe um campo oculto que não deve ser preenchido por usuários reais.
+
+Quando esse campo é preenchido, a API retorna uma resposta de sucesso sem realizar o envio do e-mail.
+
+Isso evita fornecer ao bot uma resposta explícita indicando que o envio foi bloqueado.
+
+Rate limit
+
+A API limita a quantidade de envios por endereço IP.
+
+A configuração atual é:
+
+5 envios
+10 minutos
+
+Quando o limite é excedido, a API responde com:
+
+HTTP 429
+
+O controle atual utiliza memória da instância.
+
+Em ambientes serverless, isso significa que o limite não é distribuído globalmente entre todas as instâncias.
+
+Para um cenário de maior exposição, a implementação pode ser substituída por Redis/Upstash mantendo a mesma interface de verificarLimite().
+
+LGPD
+
+O formulário coleta dados pessoais necessários para o processo de cadastro comercial, incluindo informações como:
+
+CPF/CNPJ;
+RG ou Inscrição Estadual;
+endereço;
+telefone;
+e-mail;
+referências comerciais.
+
+O sistema não possui banco de dados próprio e não mantém uma cópia dos cadastros.
+
+Os dados são recebidos pela aplicação, validados e encaminhados ao serviço de e-mail configurado.
+
+A retenção posterior dos dados ocorre na caixa de e-mail da empresa e deve seguir as políticas internas de segurança, acesso e retenção de informações.
+
+Deploy na Vercel
+
+O projeto foi estruturado para execução em ambiente serverless e pode ser publicado na Vercel.
+
+Fluxo recomendado:
+
+GitHub
+   │
+   ▼
+Vercel
+   │
+   ▼
+Next.js
+   │
+   └── /api/cadastro
+          │
+          ▼
+       E-mail
+Configuração
+Suba o projeto para o GitHub.
+Importe o repositório na Vercel.
+Configure as variáveis de ambiente em:
+Project Settings
+└── Environment Variables
+Cadastre as variáveis necessárias para o provedor escolhido.
+Faça o deploy.
+Realize um cadastro de teste.
+Confirme o recebimento do e-mail.
+Teste o botão Responder.
+Verifique os logs da função caso ocorra alguma falha.
+
+Nenhuma variável utilizada pelo servidor possui prefixo:
+
+NEXT_PUBLIC_
+
+Portanto, as credenciais e configurações de e-mail não são expostas ao navegador.
+
+Testes
+
+Os testes automatizados estão organizados por responsabilidade:
+
+tests/
+│
+├── validadores.test.ts
+│   └── CPF, CNPJ, telefone, CEP e referências
+│
+├── mascaras.test.ts
+│   └── documentos, telefone, CEP e moeda
+│
+├── schema.test.ts
+│   └── campos obrigatórios, opcionais,
+│       referências e honeypot
+│
+└── api-cadastro.test.ts
+    └── respostas 200, 400, 429 e 502
+
+Executar:
+
+npm test
+
+Para validar o projeto antes do deploy:
+
+npm run build
+Git
+
+O desenvolvimento é organizado utilizando branches para alterações específicas.
+
+Exemplo:
+
+main
+ │
+ └── feat/modernizacao-cadastro
+
+Após validação e testes, a branch de funcionalidade pode ser integrada à main, que é a branch utilizada para produção.
+
+Exemplo:
+
+git checkout main
+git pull origin main
+git merge feat/modernizacao-cadastro
+git push origin main
+Status
+
+Em desenvolvimento / preparação para produção.
+
+O próximo passo é concluir a validação do build, integrar a branch de modernização à main e realizar o primeiro deploy na Vercel. 
