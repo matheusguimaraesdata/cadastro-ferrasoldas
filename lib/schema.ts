@@ -1,127 +1,104 @@
 import { z } from 'zod';
-import {
-  contarReferenciasComTelefone,
-  limparDocumento,
-  validarCep,
-  validarCpfOuCnpj,
-  validarTelefone,
-} from './validadores';
+import { limparDocumento, validarCep, validarCpf, validarCnpj, validarTelefone } from './validadores';
 
 export const VENDEDORES = [
+  'Guilherme Resende',
+  'Paulo Ferraz',
+  'Otávio Oliveira',
   'João Paulo',
   'Leonardo Ferreira',
   'Anderson Lopes',
   'Marcos Paulo',
+  'Ezequiel Lopes',
   'Ferrasoldas',
 ] as const;
 
-const obrigatorio = (campo: string) => `Informe ${campo}.`;
+export const ESTADOS_BRASIL = [
+  { sigla: 'AC', nome: 'Acre' }, { sigla: 'AL', nome: 'Alagoas' },
+  { sigla: 'AP', nome: 'Amapá' }, { sigla: 'AM', nome: 'Amazonas' },
+  { sigla: 'BA', nome: 'Bahia' }, { sigla: 'CE', nome: 'Ceará' },
+  { sigla: 'DF', nome: 'Distrito Federal' }, { sigla: 'ES', nome: 'Espírito Santo' },
+  { sigla: 'GO', nome: 'Goiás' }, { sigla: 'MA', nome: 'Maranhão' },
+  { sigla: 'MT', nome: 'Mato Grosso' }, { sigla: 'MS', nome: 'Mato Grosso do Sul' },
+  { sigla: 'MG', nome: 'Minas Gerais' }, { sigla: 'PA', nome: 'Pará' },
+  { sigla: 'PB', nome: 'Paraíba' }, { sigla: 'PR', nome: 'Paraná' },
+  { sigla: 'PE', nome: 'Pernambuco' }, { sigla: 'PI', nome: 'Piauí' },
+  { sigla: 'RJ', nome: 'Rio de Janeiro' }, { sigla: 'RN', nome: 'Rio Grande do Norte' },
+  { sigla: 'RS', nome: 'Rio Grande do Sul' }, { sigla: 'RO', nome: 'Rondônia' },
+  { sigla: 'RR', nome: 'Roraima' }, { sigla: 'SC', nome: 'Santa Catarina' },
+  { sigla: 'SP', nome: 'São Paulo' }, { sigla: 'SE', nome: 'Sergipe' },
+  { sigla: 'TO', nome: 'Tocantins' },
+] as const;
+
+const referenciaSchema = z.object({
+  empresa: z.string().trim().min(2, 'Informe a empresa da referência.').max(150),
+  telefone: z.string().trim().refine(validarTelefone, 'Telefone inválido. Use (31) 99999-9999.'),
+});
 
 export const schemaCadastro = z.object({
-  email: z
-    .string()
-    .trim()
-    .min(1, obrigatorio('o e-mail'))
-    .email('E-mail inválido. Confira se falta algo depois do @.')
-    .max(254),
-
-  nome: z
-    .string()
-    .trim()
-    .min(3, 'Informe o nome da empresa ou da pessoa física.')
-    .max(150),
-
-  documento: z
-    .string()
-    .trim()
-    .min(1, obrigatorio('o CNPJ ou CPF'))
-    .refine(validarCpfOuCnpj, 'Documento inválido. Confira os números digitados.')
-    .transform(limparDocumento),
-
-  inscricaoEstadual: z
-    .string()
-    .trim()
-    .min(1, 'Informe a inscrição estadual. Se for isento, escreva ISENTO.')
-    .max(30),
-
+  tipoPessoa: z.enum(['PF', 'PJ']),
+  razaoSocial: z.string().trim().max(150).optional().or(z.literal('')),
+  nome: z.string().trim().max(150).optional().or(z.literal('')),
+  cnpj: z.string().trim().optional().or(z.literal('')).default('').transform(limparDocumento),
+  cpf: z.string().trim().optional().or(z.literal('')).default('').transform((v) => v.replace(/\D/g, '')),
   rg: z.string().trim().max(30).optional().or(z.literal('')),
-
-  telefone: z
-    .string()
-    .trim()
-    .min(1, obrigatorio('ao menos um telefone'))
-    .refine(
-      (valor) =>
-        valor
-          .split(/[\n,;/]/)
-          .map((t) => t.trim())
-          .filter(Boolean)
-          .every(validarTelefone),
-      'Telefone inválido. Use DDD + número, por exemplo (31) 3333-4444.',
-    ),
-
-  endereco: z.string().trim().min(5, obrigatorio('o endereço')).max(200),
-
-  cidade: z.string().trim().min(2, obrigatorio('a cidade')).max(80),
-
-  estado: z
-    .string()
-    .trim()
-    .max(2)
-    .optional()
-    .or(z.literal(''))
-    .refine(
-      (valor) => !valor || /^[A-Za-z]{2}$/.test(valor),
-      'Use a sigla com duas letras, como MG.',
-    ),
-
-  cep: z
-    .string()
-    .trim()
-    .optional()
-    .or(z.literal(''))
-    .refine((valor) => !valor || validarCep(valor), 'CEP deve ter 8 dígitos.'),
-
-  vendedor: z.enum(VENDEDORES, {
-    errorMap: () => ({ message: 'Selecione o vendedor responsável.' }),
-  }),
-
-  valorVenda: z
-    .string()
-    .trim()
-    .min(1, obrigatorio('o valor da venda'))
-    .refine(
-      (valor) => valor.replace(/\D/g, '').length > 0,
-      'Informe um valor numérico.',
-    ),
-
-  referenciasComerciais: z
-    .string()
-    .trim()
-    .min(1, obrigatorio('as referências comerciais'))
-    .refine(
-      (valor) => contarReferenciasComTelefone(valor) >= 3,
-      'Informe no mínimo 3 referências comerciais, cada uma em uma linha, com telefone de contato.',
-    ),
-
-  // Campo honeypot: invisível para pessoas, preenchido por bots.
-  website: z.string().max(0, 'Envio bloqueado.').optional().or(z.literal('')),
+  inscricaoEstadual: z.string().trim().max(30).optional().or(z.literal('')),
+  email: z.string().trim().email('E-mail inválido.').max(254),
+  telefone: z.string().trim().refine(validarTelefone, 'Telefone inválido. Use (31) 99999-9999.'),
+  cep: z.string().trim().refine(validarCep, 'CEP deve ter 8 dígitos.'),
+  endereco: z.string().trim().min(3, 'Informe o logradouro.').max(200),
+  numero: z.string().trim().min(1, 'Informe o número.').max(20),
+  complemento: z.string().trim().max(100).optional().or(z.literal('')),
+  bairro: z.string().trim().min(2, 'Informe o bairro.').max(100),
+  estado: z.string().length(2, 'Selecione o estado.'),
+  cidade: z.string().trim().min(2, 'Selecione o município.').max(100),
+  vendedor: z.enum(VENDEDORES, { errorMap: () => ({ message: 'Selecione o vendedor responsável.' }) }),
+  valorVenda: z.string().trim().min(1, 'Informe o valor da venda.'),
+  referenciasComerciais: z.array(referenciaSchema).min(3, 'Informe pelo menos 3 referências.').max(6, 'O limite é de 6 referências.'),
+  website: z.string().max(0).optional().or(z.literal('')),
+}).superRefine((dados, ctx) => {
+  if (dados.tipoPessoa === 'PJ') {
+    if (!dados.razaoSocial || dados.razaoSocial.length < 3) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['razaoSocial'], message: 'Informe a razão social.' });
+    }
+    if (!validarCnpj(dados.cnpj)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cnpj'], message: 'CNPJ inválido.' });
+    }
+    if (!dados.inscricaoEstadual) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['inscricaoEstadual'], message: 'Informe a inscrição estadual ou ISENTO.' });
+    }
+  } else {
+    if (!dados.nome || dados.nome.length < 3) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['nome'], message: 'Informe o nome completo.' });
+    }
+    if (!dados.rg) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['rg'], message: 'Informe o RG.' });
+    }
+    if (!validarCpf(dados.cpf)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cpf'], message: 'CPF inválido.' });
+    }
+  }
 });
 
 export type DadosCadastro = z.infer<typeof schemaCadastro>;
 
 export const ROTULOS: Record<string, string> = {
-  email: 'E-mail',
-  nome: 'Empresa / Pessoa Física',
-  documento: 'CNPJ ou CPF',
-  inscricaoEstadual: 'Inscrição Estadual',
+  tipoPessoa: 'Tipo de pessoa',
+  razaoSocial: 'Razão Social',
+  nome: 'Nome completo',
+  cnpj: 'CNPJ',
+  cpf: 'CPF',
   rg: 'RG',
+  inscricaoEstadual: 'Inscrição Estadual',
+  email: 'E-mail',
   telefone: 'Telefone',
-  endereco: 'Endereço',
-  cidade: 'Cidade',
-  estado: 'Estado',
   cep: 'CEP',
+  endereco: 'Rua / Logradouro',
+  numero: 'Número',
+  complemento: 'Complemento',
+  bairro: 'Bairro',
+  estado: 'Estado',
+  cidade: 'Município',
   vendedor: 'Vendedor',
   valorVenda: 'Valor da Venda',
-  referenciasComerciais: 'Referências Comerciais',
 };

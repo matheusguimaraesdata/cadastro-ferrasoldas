@@ -4,13 +4,22 @@ export default function PaginaCadastro() {
   return (
     <main className="pagina">
       <header className="cabecalho">
-        <p className="cabecalho__marca">Ferrasoldas</p>
-        <h1 className="cabecalho__titulo">Cadastro de cliente</h1>
-        <p className="cabecalho__descricao">
-          Preencha os dados abaixo para abrir seu cadastro com CNPJ ou CPF. O
-          financeiro recebe o formulário assim que você enviar.
+        <div className="logo-ferrasoldas">
+          <img
+            src="/logo-ferrasoldas.png"
+            alt="Ferrasoldas Comércio e Representações Ltda."
+            className="logo-ferrasoldas__imagem"
+          />
+        </div>
+
+        <h1>Cadastro de Cliente</h1>
+
+        <p>
+          Preencha os dados abaixo para abertura do cadastro comercial.
+          As informações serão encaminhadas ao setor financeiro da Ferrasoldas.
         </p>
       </header>
+
       <FormularioCadastro />
     </main>
   );
