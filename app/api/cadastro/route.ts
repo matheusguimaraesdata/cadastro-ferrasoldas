@@ -8,12 +8,17 @@ export const dynamic = 'force-dynamic';
 
 function identificarOrigem(req: NextRequest): string {
   const encaminhado = req.headers.get('x-forwarded-for');
-  if (encaminhado) return encaminhado.split(',')[0].trim();
+
+  if (encaminhado) {
+    return encaminhado.split(',')[0].trim();
+  }
+
   return req.headers.get('x-real-ip') ?? 'desconhecido';
 }
 
 export async function POST(req: NextRequest) {
   const limite = verificarLimite(identificarOrigem(req));
+
   if (!limite.permitido) {
     return NextResponse.json(
       {
@@ -21,11 +26,17 @@ export async function POST(req: NextRequest) {
           limite.segundosRestantes / 60,
         )} minutos.`,
       },
-      { status: 429, headers: { 'Retry-After': String(limite.segundosRestantes) } },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': String(limite.segundosRestantes),
+        },
+      },
     );
   }
 
   let corpo: unknown;
+
   try {
     corpo = await req.json();
   } catch {
@@ -35,27 +46,54 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  /*
+   * Honeypot:
+   * Se o campo oculto estiver preenchido, consideramos a requisição
+   * automatizada e encerramos silenciosamente.
+   *
+   * A verificação acontece antes do schema porque o valor preenchido
+   * pode ser considerado inválido pelo schema.
+   */
+  if (
+    typeof corpo === 'object' &&
+    corpo !== null &&
+    'website' in corpo &&
+    typeof corpo.website === 'string' &&
+    corpo.website.trim() !== ''
+  ) {
+    return NextResponse.json(
+      { mensagem: 'Cadastro recebido.' },
+      { status: 200 },
+    );
+  }
+
   const resultado = schemaCadastro.safeParse(corpo);
+
   if (!resultado.success) {
     const erros: Record<string, string> = {};
+
     for (const problema of resultado.error.issues) {
       const campo = String(problema.path[0] ?? 'formulario');
-      if (!erros[campo]) erros[campo] = problema.message;
+
+      if (!erros[campo]) {
+        erros[campo] = problema.message;
+      }
     }
+
     return NextResponse.json(
-      { mensagem: 'Confira os campos destacados.', erros },
+      {
+        mensagem: 'Confira os campos destacados.',
+        erros,
+      },
       { status: 400 },
     );
   }
 
-  // O honeypot só é conhecido depois da validação: bot preenchido cai aqui.
-  if (resultado.data.website) {
-    return NextResponse.json({ mensagem: 'Cadastro recebido.' }, { status: 200 });
-  }
-
   const envio = await enviarCadastro(resultado.data);
+
   if (!envio.ok) {
     console.error('Falha ao enviar cadastro:', envio.erro);
+
     return NextResponse.json(
       {
         mensagem:
@@ -65,5 +103,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ mensagem: 'Cadastro enviado.' }, { status: 200 });
+  return NextResponse.json(
+    { mensagem: 'Cadastro enviado.' },
+    { status: 200 },
+  );
 }

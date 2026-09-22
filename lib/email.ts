@@ -1,13 +1,21 @@
 import nodemailer from 'nodemailer';
 import path from 'node:path';
+
 import type { DadosCadastro } from './schema';
 import { tipoDocumento } from './validadores';
 
 export type ResultadoEnvio =
-  | { ok: true; id?: string }
-  | { ok: false; erro: string };
+  | {
+      ok: true;
+      id?: string;
+    }
+  | {
+      ok: false;
+      erro: string;
+    };
 
-const LOGO_CID = 'logo-ferrasoldas@ferrasoldas';
+const LOGO_CID =
+  'logo-ferrasoldas@ferrasoldas';
 
 type AnexoResend = {
   filename: string;
@@ -16,36 +24,64 @@ type AnexoResend = {
   contentId: string;
 };
 
-function exigir(variavel: string): string {
-  const valor = process.env[variavel];
+/**
+ * =========================================================
+ * UTILITÁRIOS
+ * =========================================================
+ */
+
+function exigir(
+  variavel: string,
+): string {
+  const valor =
+    process.env[variavel];
 
   if (!valor) {
-    throw new Error(`Variável de ambiente ausente: ${variavel}`);
+    throw new Error(
+      `Variável de ambiente ausente: ${variavel}`,
+    );
   }
 
   return valor;
 }
 
-function escapar(texto: string): string {
+function escapar(
+  texto: string,
+): string {
   return texto
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+    .replace(
+      /'/g,
+      '&#039;',
+    );
 }
 
-function formatarDocumento(documento: string): string {
-  const somenteNumeros = documento.replace(/\D/g, '');
+function formatarDocumento(
+  documento: string,
+): string {
+  const somenteNumeros =
+    documento.replace(
+      /\D/g,
+      '',
+    );
 
-  if (somenteNumeros.length === 11) {
+  if (
+    somenteNumeros.length ===
+    11
+  ) {
     return somenteNumeros.replace(
       /(\d{3})(\d{3})(\d{3})(\d{2})/,
       '$1.$2.$3-$4',
     );
   }
 
-  if (somenteNumeros.length === 14) {
+  if (
+    somenteNumeros.length ===
+    14
+  ) {
     return somenteNumeros.replace(
       /(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,
       '$1.$2.$3/$4-$5',
@@ -55,124 +91,457 @@ function formatarDocumento(documento: string): string {
   return documento;
 }
 
-function formatarValorVenda(valor: string): string {
-  return valor?.trim() || 'Não informado';
+function formatarValorVenda(
+  valor: string,
+): string {
+  return (
+    valor?.trim() ||
+    'Não informado'
+  );
 }
 
-function obterIdentificacao(dados: DadosCadastro): string {
-  return dados.tipoPessoa === 'PJ'
+function obterEmail(
+  dados: DadosCadastro,
+): string {
+  return dados.email?.trim() || '';
+}
+
+function obterTelefone(
+  dados: DadosCadastro,
+): string {
+  return (
+    dados.telefone?.trim() ||
+    ''
+  );
+}
+
+function ehMercadoLivre(
+  dados: DadosCadastro,
+): boolean {
+  return (
+    dados.tipoCadastro ===
+    'MERCADO_LIVRE'
+  );
+}
+
+/**
+ * =========================================================
+ * IDENTIFICAÇÃO
+ * =========================================================
+ */
+
+function obterIdentificacao(
+  dados: DadosCadastro,
+): string {
+  if (
+    ehMercadoLivre(dados)
+  ) {
+    return (
+      dados.mercadoLivreNome ||
+      'Comprador Mercado Livre'
+    );
+  }
+
+  return dados.tipoPessoa ===
+    'PJ'
     ? dados.razaoSocial ?? ''
     : dados.nome ?? '';
 }
 
-function obterDocumento(dados: DadosCadastro): {
+function obterDocumento(
+  dados: DadosCadastro,
+): {
   rotulo: string;
   valor: string;
 } {
-  if (dados.tipoPessoa === 'PJ') {
+  if (
+    ehMercadoLivre(dados)
+  ) {
+    return {
+      rotulo:
+        'CPF do comprador',
+
+      valor:
+        formatarDocumento(
+          dados.mercadoLivreCpf,
+        ),
+    };
+  }
+
+  if (
+    dados.tipoPessoa ===
+    'PJ'
+  ) {
     return {
       rotulo: 'CNPJ',
-      valor: formatarDocumento(dados.cnpj),
+
+      valor:
+        formatarDocumento(
+          dados.cnpj,
+        ),
     };
   }
 
   return {
     rotulo: 'CPF',
-    valor: formatarDocumento(dados.cpf),
+
+    valor:
+      formatarDocumento(
+        dados.cpf,
+      ),
   };
 }
 
-function obterDocumentoSecundario(dados: DadosCadastro): {
+function obterDocumentoSecundario(
+  dados: DadosCadastro,
+): {
   rotulo: string;
   valor: string;
 } {
-  if (dados.tipoPessoa === 'PJ') {
+  if (
+    ehMercadoLivre(dados)
+  ) {
     return {
-      rotulo: 'Inscrição Estadual',
-      valor: dados.inscricaoEstadual ?? '',
+      rotulo: 'Quem recebe',
+
+      valor:
+        dados.mercadoLivreQuemRecebe ??
+        '',
+    };
+  }
+
+  if (
+    dados.tipoPessoa ===
+    'PJ'
+  ) {
+    return {
+      rotulo:
+        'Inscrição Estadual',
+
+      valor:
+        dados.inscricaoEstadual ??
+        '',
     };
   }
 
   return {
     rotulo: 'RG',
-    valor: dados.rg ?? '',
+
+    valor:
+      dados.rg ?? '',
   };
 }
 
-export function montarAssunto(dados: DadosCadastro): string {
+function obterTipoCadastro(
+  dados: DadosCadastro,
+): string {
+  if (
+    ehMercadoLivre(dados)
+  ) {
+    return 'Mercado Livre';
+  }
+
+  return dados.tipoPessoa ===
+    'PJ'
+    ? 'Pessoa Jurídica'
+    : 'Pessoa Física';
+}
+
+/**
+ * =========================================================
+ * ASSUNTO
+ * =========================================================
+ */
+
+export function montarAssunto(
+  dados: DadosCadastro,
+): string {
+  if (
+    ehMercadoLivre(dados)
+  ) {
+    const identificacao =
+      obterIdentificacao(
+        dados,
+      );
+
+    return (
+      `Novo Cadastro Mercado Livre - ` +
+      `${identificacao} - ` +
+      `Vendedor ${dados.vendedor}`
+    );
+  }
+
   const documento =
     tipoDocumento(
-      dados.tipoPessoa === 'PJ' ? dados.cnpj : dados.cpf,
-    ) ?? dados.tipoPessoa;
+      dados.tipoPessoa ===
+        'PJ'
+        ? dados.cnpj
+        : dados.cpf,
+    ) ??
+    dados.tipoPessoa;
 
-  const identificacao = obterIdentificacao(dados);
+  const identificacao =
+    obterIdentificacao(
+      dados,
+    );
 
-  return `Novo Cadastro ${documento} - ${identificacao} - Vendedor ${dados.vendedor}`;
+  return (
+    `Novo Cadastro ${documento} - ` +
+    `${identificacao} - ` +
+    `Vendedor ${dados.vendedor}`
+  );
 }
 
-export function montarTextoSimples(dados: DadosCadastro): string {
-  const identificacao = obterIdentificacao(dados);
-  const documento = obterDocumento(dados);
-  const documentoSecundario = obterDocumentoSecundario(dados);
+/**
+ * =========================================================
+ * TEXTO SIMPLES
+ * =========================================================
+ */
 
-  const linhas = [
+export function montarTextoSimples(
+  dados: DadosCadastro,
+): string {
+  const identificacao =
+    obterIdentificacao(
+      dados,
+    );
+
+  const documento =
+    obterDocumento(
+      dados,
+    );
+
+  const documentoSecundario =
+    obterDocumentoSecundario(
+      dados,
+    );
+
+  const linhas: string[] = [
     'FERRASOLDAS COMÉRCIO E REPRESENTAÇÕES LTDA.',
-    'NOVO CADASTRO DE CLIENTE',
+
+    ehMercadoLivre(dados)
+      ? 'NOVO CADASTRO MERCADO LIVRE'
+      : 'NOVO CADASTRO DE CLIENTE',
+
     '',
+
     '========================================',
-    'DADOS CADASTRAIS',
+
+    ehMercadoLivre(dados)
+      ? 'DADOS DO COMPRADOR'
+      : 'DADOS CADASTRAIS',
+
     '========================================',
-    `Tipo de pessoa: ${
-      dados.tipoPessoa === 'PJ'
-        ? 'Pessoa Jurídica'
-        : 'Pessoa Física'
-    }`,
+
+    `Tipo de cadastro: ${obterTipoCadastro(
+      dados,
+    )}`,
+
     `Nome / Razão Social: ${identificacao}`,
+
     `${documento.rotulo}: ${documento.valor}`,
-    `${documentoSecundario.rotulo}: ${documentoSecundario.valor}`,
-    '',
-    '========================================',
-    'CONTATO',
-    '========================================',
-    `E-mail: ${dados.email}`,
-    `Telefone: ${dados.telefone}`,
-    '',
-    '========================================',
-    'ENDEREÇO',
-    '========================================',
-    `Endereço: ${dados.endereco}, ${dados.numero}`,
-    ...(dados.complemento
-      ? [`Complemento: ${dados.complemento}`]
-      : []),
-    `Bairro: ${dados.bairro}`,
-    `Município: ${dados.cidade}`,
-    `Estado: ${dados.estado}`,
-    `CEP: ${dados.cep}`,
-    '',
-    '========================================',
-    'INFORMAÇÕES COMERCIAIS',
-    '========================================',
-    `Vendedor: ${dados.vendedor}`,
-    `Valor da Venda: ${formatarValorVenda(dados.valorVenda)}`,
-    '',
-    '========================================',
-    'REFERÊNCIAS COMERCIAIS',
-    '========================================',
-    ...dados.referenciasComerciais.map(
-      (ref, index) =>
-        `${String(index + 1).padStart(2, '0')} - ${ref.empresa} | ${ref.telefone}`,
-    ),
-    '',
-    '========================================',
-    'Este cadastro foi recebido pelo formulário online da Ferrasoldas.',
   ];
 
-  return linhas.join('\n');
+  /**
+   * ---------------------------------------------------------
+   * MERCADO LIVRE
+   * ---------------------------------------------------------
+   */
+
+  if (
+    ehMercadoLivre(dados)
+  ) {
+    linhas.push(
+      `${documentoSecundario.rotulo}: ${documentoSecundario.valor}`,
+
+      '',
+
+      '========================================',
+
+      'DADOS DO ENVIO',
+
+      '========================================',
+
+      `Endereço: ${dados.endereco}, ${dados.numero}`,
+    );
+
+    if (
+      dados.complemento
+    ) {
+      linhas.push(
+        `Complemento: ${dados.complemento}`,
+      );
+    }
+
+    linhas.push(
+      `Bairro: ${dados.bairro}`,
+
+      `Município: ${dados.cidade}`,
+
+      `Estado: ${dados.estado}`,
+
+      `CEP: ${dados.cep}`,
+
+      `Referência: ${dados.mercadoLivreReferencia}`,
+    );
+
+    if (
+      obterTelefone(dados)
+    ) {
+      linhas.push(
+        `Telefone: ${obterTelefone(
+          dados,
+        )}`,
+      );
+    }
+
+    if (
+      obterEmail(dados)
+    ) {
+      linhas.push(
+        `E-mail: ${obterEmail(
+          dados,
+        )}`,
+      );
+    }
+  }
+
+  /**
+   * ---------------------------------------------------------
+   * PF / PJ
+   * ---------------------------------------------------------
+   */
+
+  else {
+    linhas.push(
+      `${documentoSecundario.rotulo}: ${documentoSecundario.valor}`,
+
+      '',
+
+      '========================================',
+
+      'CONTATO',
+
+      '========================================',
+
+      `E-mail: ${obterEmail(
+        dados,
+      )}`,
+
+      `Telefone: ${obterTelefone(
+        dados,
+      )}`,
+
+      '',
+
+      '========================================',
+
+      'ENDEREÇO',
+
+      '========================================',
+
+      `Endereço: ${dados.endereco}, ${dados.numero}`,
+    );
+
+    if (
+      dados.complemento
+    ) {
+      linhas.push(
+        `Complemento: ${dados.complemento}`,
+      );
+    }
+
+    linhas.push(
+      `Bairro: ${dados.bairro}`,
+
+      `Município: ${dados.cidade}`,
+
+      `Estado: ${dados.estado}`,
+
+      `CEP: ${dados.cep}`,
+    );
+  }
+
+  /**
+   * ---------------------------------------------------------
+   * INFORMAÇÕES COMERCIAIS
+   * ---------------------------------------------------------
+   */
+
+  linhas.push(
+    '',
+
+    '========================================',
+
+    'INFORMAÇÕES COMERCIAIS',
+
+    '========================================',
+
+    `Vendedor: ${dados.vendedor}`,
+
+    `Valor da Venda: ${formatarValorVenda(
+      dados.valorVenda,
+    )}`,
+  );
+
+  /**
+   * ---------------------------------------------------------
+   * REFERÊNCIAS COMERCIAIS
+   * ---------------------------------------------------------
+   */
+
+  if (
+    !ehMercadoLivre(dados)
+  ) {
+    linhas.push(
+      '',
+
+      '========================================',
+
+      'REFERÊNCIAS COMERCIAIS',
+
+      '========================================',
+
+      ...dados.referenciasComerciais.map(
+        (
+          ref,
+          index,
+        ) =>
+          `${String(
+            index + 1,
+          ).padStart(
+            2,
+            '0',
+          )} - ${ref.empresa} | ${ref.telefone}`,
+      ),
+    );
+  }
+
+  linhas.push(
+    '',
+
+    '========================================',
+
+    'Este cadastro foi recebido pelo formulário online da Ferrasoldas.',
+  );
+
+  return linhas.join(
+    '\n',
+  );
 }
+
+/**
+ * =========================================================
+ * HTML
+ * =========================================================
+ */
 
 function criarLinha(
   rotulo: string,
-  valor: string | undefined | null,
+  valor:
+    | string
+    | undefined
+    | null,
 ): string {
   return `
     <tr>
@@ -205,7 +574,11 @@ function criarLinha(
           word-break:break-word;
         "
       >
-        ${escapar(String(valor ?? ''))}
+        ${escapar(
+          String(
+            valor ?? '',
+          ),
+        )}
       </td>
     </tr>
   `;
@@ -219,6 +592,7 @@ function criarSecao(
   return `
     <tr>
       <td style="padding:0 0 18px 0;">
+
         <table
           role="presentation"
           width="100%"
@@ -230,14 +604,21 @@ function criarSecao(
             background:#ffffff;
           "
         >
+
           <tr>
-            <td style="padding:18px 20px 0 20px;">
+            <td
+              style="
+                padding:18px 20px 0 20px;
+              "
+            >
+
               <table
                 role="presentation"
                 cellpadding="0"
                 cellspacing="0"
               >
                 <tr>
+
                   <td
                     style="
                       width:34px;
@@ -265,13 +646,20 @@ function criarSecao(
                   >
                     ${escapar(titulo)}
                   </td>
+
                 </tr>
               </table>
+
             </td>
           </tr>
 
           <tr>
-            <td style="padding:8px 20px 18px 20px;">
+            <td
+              style="
+                padding:8px 20px 18px 20px;
+              "
+            >
+
               <table
                 role="presentation"
                 width="100%"
@@ -280,73 +668,31 @@ function criarSecao(
               >
                 ${conteudo}
               </table>
+
             </td>
           </tr>
+
         </table>
+
       </td>
     </tr>
   `;
 }
 
-export function montarHtml(dados: DadosCadastro): string {
-  const identificacao = obterIdentificacao(dados);
-  const documento = obterDocumento(dados);
-  const documentoSecundario = obterDocumentoSecundario(dados);
-
-  const recebidoEm = new Date().toLocaleString('pt-BR', {
-    timeZone: 'America/Sao_Paulo',
-    dateStyle: 'short',
-    timeStyle: 'short',
-  });
-
-  const dadosCadastrais = [
-    criarLinha(
-      'Tipo de pessoa',
-      dados.tipoPessoa === 'PJ'
-        ? 'Pessoa Jurídica'
-        : 'Pessoa Física',
-    ),
-    criarLinha('Nome / Razão Social', identificacao),
-    criarLinha(documento.rotulo, documento.valor),
-    criarLinha(
-      documentoSecundario.rotulo,
-      documentoSecundario.valor,
-    ),
-  ].join('');
-
-  const contato = [
-    criarLinha('E-mail', dados.email),
-    criarLinha('Telefone', dados.telefone),
-  ].join('');
-
-  const endereco = [
-    criarLinha(
-      'Endereço',
-      `${dados.endereco}, ${dados.numero}`,
-    ),
-    ...(dados.complemento
-      ? [criarLinha('Complemento', dados.complemento)]
-      : []),
-    criarLinha('Bairro', dados.bairro),
-    criarLinha('Município', dados.cidade),
-    criarLinha('Estado', dados.estado),
-    criarLinha('CEP', dados.cep),
-  ].join('');
-
-  const comercial = [
-    criarLinha('Vendedor', dados.vendedor),
-    criarLinha(
-      'Valor da Venda',
-      formatarValorVenda(dados.valorVenda),
-    ),
-  ].join('');
-
+function criarSecaoReferencias(
+  dados: DadosCadastro,
+): string {
   const referencias =
-    dados.referenciasComerciais.length > 0
+    dados.referenciasComerciais
+      .length > 0
       ? dados.referenciasComerciais
           .map(
-            (ref, index) => `
+            (
+              ref,
+              index,
+            ) => `
               <tr>
+
                 <td
                   style="
                     padding:11px 8px 11px 0;
@@ -358,7 +704,12 @@ export function montarHtml(dados: DadosCadastro): string {
                     vertical-align:top;
                   "
                 >
-                  ${String(index + 1).padStart(2, '0')}
+                  ${String(
+                    index + 1,
+                  ).padStart(
+                    2,
+                    '0',
+                  )}
                 </td>
 
                 <td
@@ -371,7 +722,9 @@ export function montarHtml(dados: DadosCadastro): string {
                     vertical-align:top;
                   "
                 >
-                  ${escapar(ref.empresa)}
+                  ${escapar(
+                    ref.empresa ?? '',
+                  )}
                 </td>
 
                 <td
@@ -385,8 +738,11 @@ export function montarHtml(dados: DadosCadastro): string {
                     white-space:nowrap;
                   "
                 >
-                  ${escapar(ref.telefone)}
+                  ${escapar(
+                    ref.telefone ?? '',
+                  )}
                 </td>
+
               </tr>
             `,
           )
@@ -406,13 +762,501 @@ export function montarHtml(dados: DadosCadastro): string {
           </tr>
         `;
 
+  return `
+    <tr>
+      <td style="padding:0 0 18px 0;">
+
+        <table
+          role="presentation"
+          width="100%"
+          cellpadding="0"
+          cellspacing="0"
+          style="
+            border:1px solid #eaecf0;
+            border-radius:10px;
+            background:#ffffff;
+          "
+        >
+
+          <tr>
+            <td
+              style="
+                padding:18px 20px 10px 20px;
+              "
+            >
+
+              <table
+                role="presentation"
+                cellpadding="0"
+                cellspacing="0"
+              >
+                <tr>
+
+                  <td
+                    style="
+                      width:34px;
+                      height:34px;
+                      border-radius:8px;
+                      background:#fff9a8;
+                      text-align:center;
+                      vertical-align:middle;
+                      font-family:Arial,Helvetica,sans-serif;
+                      font-size:16px;
+                    "
+                  >
+                    #
+                  </td>
+
+                  <td
+                    style="
+                      padding-left:10px;
+                      font-family:Arial,Helvetica,sans-serif;
+                      font-size:16px;
+                      line-height:22px;
+                      font-weight:700;
+                      color:#111111;
+                    "
+                  >
+                    Referências comerciais
+                  </td>
+
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <tr>
+            <td
+              style="
+                padding:4px 20px 20px 20px;
+              "
+            >
+
+              <table
+                role="presentation"
+                width="100%"
+                cellpadding="0"
+                cellspacing="0"
+              >
+
+                <tr>
+
+                  <th
+                    align="left"
+                    style="
+                      padding:8px 8px 8px 0;
+                      border-bottom:1px solid #d0d5dd;
+                      font-family:Arial,Helvetica,sans-serif;
+                      font-size:11px;
+                      color:#667085;
+                      text-transform:uppercase;
+                    "
+                  >
+                    #
+                  </th>
+
+                  <th
+                    align="left"
+                    style="
+                      padding:8px;
+                      border-bottom:1px solid #d0d5dd;
+                      font-family:Arial,Helvetica,sans-serif;
+                      font-size:11px;
+                      color:#667085;
+                      text-transform:uppercase;
+                    "
+                  >
+                    Empresa
+                  </th>
+
+                  <th
+                    align="left"
+                    style="
+                      padding:8px 0 8px 8px;
+                      border-bottom:1px solid #d0d5dd;
+                      font-family:Arial,Helvetica,sans-serif;
+                      font-size:11px;
+                      color:#667085;
+                      text-transform:uppercase;
+                    "
+                  >
+                    Telefone
+                  </th>
+
+                </tr>
+
+                ${referencias}
+
+              </table>
+
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  `;
+}
+
+export function montarHtml(
+  dados: DadosCadastro,
+): string {
+  const mercadoLivre =
+    ehMercadoLivre(dados);
+
+  const identificacao =
+    obterIdentificacao(
+      dados,
+    );
+
+  const documento =
+    obterDocumento(
+      dados,
+    );
+
+  const documentoSecundario =
+    obterDocumentoSecundario(
+      dados,
+    );
+
+  const recebidoEm =
+    new Date().toLocaleString(
+      'pt-BR',
+      {
+        timeZone:
+          'America/Sao_Paulo',
+
+        dateStyle: 'short',
+
+        timeStyle: 'short',
+      },
+    );
+
+  /**
+   * ---------------------------------------------------------
+   * DADOS DO COMPRADOR / CADASTRAIS
+   * ---------------------------------------------------------
+   */
+
+  const dadosCadastrais = [
+    criarLinha(
+      'Tipo de cadastro',
+      obterTipoCadastro(
+        dados,
+      ),
+    ),
+
+    criarLinha(
+      'Nome / Razão Social',
+      identificacao,
+    ),
+
+    criarLinha(
+      documento.rotulo,
+      documento.valor,
+    ),
+
+    criarLinha(
+      documentoSecundario.rotulo,
+      documentoSecundario.valor,
+    ),
+  ].join('');
+
+  /**
+   * ---------------------------------------------------------
+   * CONTATO
+   * ---------------------------------------------------------
+   */
+
+  const contato = [
+    criarLinha(
+      'E-mail',
+      obterEmail(dados) ||
+        'Não informado',
+    ),
+
+    criarLinha(
+      'Telefone',
+      obterTelefone(
+        dados,
+      ) || 'Não informado',
+    ),
+  ].join('');
+
+  /**
+   * ---------------------------------------------------------
+   * ENDEREÇO
+   * ---------------------------------------------------------
+   */
+
+  const endereco = [
+    criarLinha(
+      'Endereço',
+      `${dados.endereco}, ${dados.numero}`,
+    ),
+
+    ...(dados.complemento
+      ? [
+          criarLinha(
+            'Complemento',
+            dados.complemento,
+          ),
+        ]
+      : []),
+
+    criarLinha(
+      'Bairro',
+      dados.bairro,
+    ),
+
+    criarLinha(
+      'Município',
+      dados.cidade,
+    ),
+
+    criarLinha(
+      'Estado',
+      dados.estado,
+    ),
+
+    criarLinha(
+      'CEP',
+      dados.cep,
+    ),
+
+    ...(mercadoLivre
+      ? [
+          criarLinha(
+            'Referência',
+            dados.mercadoLivreReferencia,
+          ),
+        ]
+      : []),
+  ].join('');
+
+  /**
+   * ---------------------------------------------------------
+   * INFORMAÇÕES COMERCIAIS
+   * ---------------------------------------------------------
+   */
+
+  const comercial = [
+    criarLinha(
+      'Vendedor',
+      dados.vendedor,
+    ),
+
+    criarLinha(
+      'Valor da Venda',
+      formatarValorVenda(
+        dados.valorVenda,
+      ),
+    ),
+  ].join('');
+
+  /**
+   * ---------------------------------------------------------
+   * SEÇÕES PRINCIPAIS
+   * ---------------------------------------------------------
+   */
+
+  const secoes = mercadoLivre
+    ? `
+        ${criarSecao(
+          'Dados do comprador',
+          dadosCadastrais,
+          '▣',
+        )}
+
+        ${criarSecao(
+          'Dados do envio',
+          endereco,
+          '⌂',
+        )}
+
+        ${criarSecao(
+          'Informações comerciais',
+          comercial,
+          'R$',
+        )}
+      `
+    : `
+        ${criarSecao(
+          'Dados cadastrais',
+          dadosCadastrais,
+          '▣',
+        )}
+
+        ${criarSecao(
+          'Contato',
+          contato,
+          '✉',
+        )}
+
+        ${criarSecao(
+          'Endereço',
+          endereco,
+          '⌂',
+        )}
+
+        ${criarSecao(
+          'Informações comerciais',
+          comercial,
+          'R$',
+        )}
+
+        ${criarSecaoReferencias(
+          dados,
+        )}
+      `;
+
+  /**
+   * ---------------------------------------------------------
+   * AVISO DE RESPOSTA
+   * ---------------------------------------------------------
+   */
+
+  const email =
+    obterEmail(dados);
+
+  const avisoResposta = email
+    ? `
+        <tr>
+          <td
+            style="
+              padding:4px 28px 28px 28px;
+            "
+          >
+
+            <table
+              role="presentation"
+              width="100%"
+              cellpadding="0"
+              cellspacing="0"
+              style="
+                background:#f9fafb;
+                border:1px solid #eaecf0;
+                border-radius:8px;
+              "
+            >
+              <tr>
+
+                <td
+                  style="
+                    padding:14px 16px;
+                    font-family:Arial,Helvetica,sans-serif;
+                    font-size:12px;
+                    line-height:19px;
+                    color:#667085;
+                  "
+                >
+
+                  <strong
+                    style="color:#344054;"
+                  >
+                    Responder este e-mail
+                  </strong>
+
+                  enviará a resposta diretamente para
+
+                  <span
+                    style="color:#111111;"
+                  >
+                    ${escapar(email)}
+                  </span>.
+
+                </td>
+
+              </tr>
+            </table>
+
+          </td>
+        </tr>
+      `
+    : `
+        <tr>
+          <td
+            style="
+              padding:4px 28px 28px 28px;
+            "
+          >
+
+            <table
+              role="presentation"
+              width="100%"
+              cellpadding="0"
+              cellspacing="0"
+              style="
+                background:#f9fafb;
+                border:1px solid #eaecf0;
+                border-radius:8px;
+              "
+            >
+              <tr>
+
+                <td
+                  style="
+                    padding:14px 16px;
+                    font-family:Arial,Helvetica,sans-serif;
+                    font-size:12px;
+                    line-height:19px;
+                    color:#667085;
+                  "
+                >
+
+                  <strong
+                    style="color:#344054;"
+                  >
+                    Cadastro sem e-mail
+                  </strong>
+
+                  <br>
+
+                  Este cadastro não possui
+                  endereço de e-mail informado
+                  para resposta.
+
+                </td>
+
+              </tr>
+            </table>
+
+          </td>
+        </tr>
+      `;
+
+  /**
+   * ---------------------------------------------------------
+   * HTML COMPLETO
+   * ---------------------------------------------------------
+   */
+
   return `<!doctype html>
 <html lang="pt-BR">
+
 <head>
+
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="x-apple-disable-message-reformatting">
-  <title>Novo Cadastro de Cliente</title>
+
+  <meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  >
+
+  <meta
+    name="x-apple-disable-message-reformatting"
+  >
+
+  <title>
+    ${
+      mercadoLivre
+        ? 'Novo Cadastro Mercado Livre'
+        : 'Novo Cadastro de Cliente'
+    }
+  </title>
+
 </head>
 
 <body
@@ -423,18 +1267,26 @@ export function montarHtml(dados: DadosCadastro): string {
     font-family:Arial,Helvetica,sans-serif;
   "
 >
+
   <table
     role="presentation"
     width="100%"
     cellpadding="0"
     cellspacing="0"
     border="0"
-    style="width:100%;background:#f5f6f8;"
+    style="
+      width:100%;
+      background:#f5f6f8;
+    "
   >
+
     <tr>
+
       <td
         align="center"
-        style="padding:32px 16px;"
+        style="
+          padding:32px 16px;
+        "
       >
 
         <table
@@ -454,7 +1306,9 @@ export function montarHtml(dados: DadosCadastro): string {
         >
 
           <!-- CABEÇALHO -->
+
           <tr>
+
             <td
               style="
                 background:#111111;
@@ -462,18 +1316,21 @@ export function montarHtml(dados: DadosCadastro): string {
                 padding:24px 28px;
               "
             >
+
               <table
                 role="presentation"
                 width="100%"
                 cellpadding="0"
                 cellspacing="0"
               >
+
                 <tr>
 
                   <td
                     align="left"
                     valign="middle"
                   >
+
                     <img
                       src="cid:${LOGO_CID}"
                       alt="Ferrasoldas Comércio e Representações Ltda."
@@ -486,6 +1343,7 @@ export function montarHtml(dados: DadosCadastro): string {
                         border:0;
                       "
                     >
+
                   </td>
 
                   <td
@@ -495,6 +1353,7 @@ export function montarHtml(dados: DadosCadastro): string {
                       font-family:Arial,Helvetica,sans-serif;
                     "
                   >
+
                     <div
                       style="
                         font-size:12px;
@@ -513,22 +1372,31 @@ export function montarHtml(dados: DadosCadastro): string {
                         font-weight:600;
                       "
                     >
-                      ${escapar(recebidoEm)}
+                      ${escapar(
+                        recebidoEm,
+                      )}
                     </div>
+
                   </td>
 
                 </tr>
+
               </table>
+
             </td>
+
           </tr>
 
           <!-- TÍTULO -->
+
           <tr>
+
             <td
               style="
                 padding:30px 28px 10px 28px;
               "
             >
+
               <div
                 style="
                   font-family:Arial,Helvetica,sans-serif;
@@ -538,7 +1406,11 @@ export function montarHtml(dados: DadosCadastro): string {
                   color:#111111;
                 "
               >
-                Novo Cadastro de Cliente
+                ${
+                  mercadoLivre
+                    ? 'Novo Cadastro Mercado Livre'
+                    : 'Novo Cadastro de Cliente'
+                }
               </div>
 
               <div
@@ -550,15 +1422,26 @@ export function montarHtml(dados: DadosCadastro): string {
                   color:#667085;
                 "
               >
-                Um novo cadastro foi recebido através do formulário
-                online da Ferrasoldas.
+                ${
+                  mercadoLivre
+                    ? 'Um novo pedido do Mercado Livre foi recebido através do formulário online da Ferrasoldas.'
+                    : 'Um novo cadastro foi recebido através do formulário online da Ferrasoldas.'
+                }
               </div>
+
             </td>
+
           </tr>
 
           <!-- IDENTIFICAÇÃO RÁPIDA -->
+
           <tr>
-            <td style="padding:18px 28px 24px 28px;">
+
+            <td
+              style="
+                padding:18px 28px 24px 28px;
+              "
+            >
 
               <table
                 role="presentation"
@@ -571,8 +1454,14 @@ export function montarHtml(dados: DadosCadastro): string {
                   border-radius:10px;
                 "
               >
+
                 <tr>
-                  <td style="padding:16px 18px;">
+
+                  <td
+                    style="
+                      padding:16px 18px;
+                    "
+                  >
 
                     <div
                       style="
@@ -585,7 +1474,11 @@ export function montarHtml(dados: DadosCadastro): string {
                         letter-spacing:.4px;
                       "
                     >
-                      Cliente
+                      ${
+                        mercadoLivre
+                          ? 'Comprador Mercado Livre'
+                          : 'Cliente'
+                      }
                     </div>
 
                     <div
@@ -598,7 +1491,9 @@ export function montarHtml(dados: DadosCadastro): string {
                         font-weight:700;
                       "
                     >
-                      ${escapar(identificacao)}
+                      ${escapar(
+                        identificacao,
+                      )}
                     </div>
 
                     <div
@@ -610,20 +1505,33 @@ export function montarHtml(dados: DadosCadastro): string {
                         color:#5a371b;
                       "
                     >
-                      ${escapar(documento.rotulo)}:
-                      ${escapar(documento.valor)}
+                      ${escapar(
+                        documento.rotulo,
+                      )}:
+                      ${escapar(
+                        documento.valor,
+                      )}
                     </div>
 
                   </td>
+
                 </tr>
+
               </table>
 
             </td>
+
           </tr>
 
           <!-- CONTEÚDO -->
+
           <tr>
-            <td style="padding:0 28px 12px 28px;">
+
+            <td
+              style="
+                padding:0 28px 12px 28px;
+              "
+            >
 
               <table
                 role="presentation"
@@ -632,204 +1540,22 @@ export function montarHtml(dados: DadosCadastro): string {
                 cellspacing="0"
               >
 
-                ${criarSecao(
-                  'Dados cadastrais',
-                  dadosCadastrais,
-                  '▣',
-                )}
-
-                ${criarSecao(
-                  'Contato',
-                  contato,
-                  '✉',
-                )}
-
-                ${criarSecao(
-                  'Endereço',
-                  endereco,
-                  '⌂',
-                )}
-
-                ${criarSecao(
-                  'Informações comerciais',
-                  comercial,
-                  'R$',
-                )}
-
-                <!-- REFERÊNCIAS -->
-                <tr>
-                  <td style="padding:0 0 18px 0;">
-
-                    <table
-                      role="presentation"
-                      width="100%"
-                      cellpadding="0"
-                      cellspacing="0"
-                      style="
-                        border:1px solid #eaecf0;
-                        border-radius:10px;
-                        background:#ffffff;
-                      "
-                    >
-
-                      <tr>
-                        <td
-                          style="
-                            padding:18px 20px 10px 20px;
-                          "
-                        >
-                          <table
-                            role="presentation"
-                            cellpadding="0"
-                            cellspacing="0"
-                          >
-                            <tr>
-
-                              <td
-                                style="
-                                  width:34px;
-                                  height:34px;
-                                  border-radius:8px;
-                                  background:#fff9a8;
-                                  text-align:center;
-                                  vertical-align:middle;
-                                  font-family:Arial,Helvetica,sans-serif;
-                                  font-size:16px;
-                                "
-                              >
-                                #
-                              </td>
-
-                              <td
-                                style="
-                                  padding-left:10px;
-                                  font-family:Arial,Helvetica,sans-serif;
-                                  font-size:16px;
-                                  line-height:22px;
-                                  font-weight:700;
-                                  color:#111111;
-                                "
-                              >
-                                Referências comerciais
-                              </td>
-
-                            </tr>
-                          </table>
-                        </td>
-                      </tr>
-
-                      <tr>
-                        <td style="padding:4px 20px 20px 20px;">
-
-                          <table
-                            role="presentation"
-                            width="100%"
-                            cellpadding="0"
-                            cellspacing="0"
-                          >
-
-                            <tr>
-                              <th
-                                align="left"
-                                style="
-                                  padding:8px 8px 8px 0;
-                                  border-bottom:1px solid #d0d5dd;
-                                  font-family:Arial,Helvetica,sans-serif;
-                                  font-size:11px;
-                                  color:#667085;
-                                  text-transform:uppercase;
-                                "
-                              >
-                                #
-                              </th>
-
-                              <th
-                                align="left"
-                                style="
-                                  padding:8px;
-                                  border-bottom:1px solid #d0d5dd;
-                                  font-family:Arial,Helvetica,sans-serif;
-                                  font-size:11px;
-                                  color:#667085;
-                                  text-transform:uppercase;
-                                "
-                              >
-                                Empresa
-                              </th>
-
-                              <th
-                                align="left"
-                                style="
-                                  padding:8px 0 8px 8px;
-                                  border-bottom:1px solid #d0d5dd;
-                                  font-family:Arial,Helvetica,sans-serif;
-                                  font-size:11px;
-                                  color:#667085;
-                                  text-transform:uppercase;
-                                "
-                              >
-                                Telefone
-                              </th>
-                            </tr>
-
-                            ${referencias}
-
-                          </table>
-
-                        </td>
-                      </tr>
-
-                    </table>
-
-                  </td>
-                </tr>
+                ${secoes}
 
               </table>
 
             </td>
+
           </tr>
 
           <!-- AVISO DE RESPOSTA -->
-          <tr>
-            <td style="padding:4px 28px 28px 28px;">
 
-              <table
-                role="presentation"
-                width="100%"
-                cellpadding="0"
-                cellspacing="0"
-                style="
-                  background:#f9fafb;
-                  border:1px solid #eaecf0;
-                  border-radius:8px;
-                "
-              >
-                <tr>
-                  <td
-                    style="
-                      padding:14px 16px;
-                      font-family:Arial,Helvetica,sans-serif;
-                      font-size:12px;
-                      line-height:19px;
-                      color:#667085;
-                    "
-                  >
-                    <strong style="color:#344054;">
-                      Responder este e-mail
-                    </strong>
-                    enviará a resposta diretamente para
-                    <span style="color:#111111;">
-                      ${escapar(dados.email)}
-                    </span>.
-                  </td>
-                </tr>
-              </table>
-
-            </td>
-          </tr>
+          ${avisoResposta}
 
           <!-- RODAPÉ -->
+
           <tr>
+
             <td
               style="
                 background:#242424;
@@ -863,16 +1589,27 @@ export function montarHtml(dados: DadosCadastro): string {
               </div>
 
             </td>
+
           </tr>
 
         </table>
 
       </td>
+
     </tr>
+
   </table>
+
 </body>
+
 </html>`;
 }
+
+/**
+ * =========================================================
+ * LOGO
+ * =========================================================
+ */
 
 function obterCaminhoLogo(): string {
   return path.join(
@@ -884,44 +1621,100 @@ function obterCaminhoLogo(): string {
 
 function obterAnexoLogoNodemailer() {
   return {
-    filename: 'logo-ferrasoldas.png',
-    path: obterCaminhoLogo(),
+    filename:
+      'logo-ferrasoldas.png',
+
+    path:
+      obterCaminhoLogo(),
+
     cid: LOGO_CID,
-    contentType: 'image/png',
+
+    contentType:
+      'image/png',
   };
 }
+
+/**
+ * =========================================================
+ * RESEND
+ * =========================================================
+ */
 
 async function enviarComResend(
   assunto: string,
   html: string,
   texto: string,
-  responderPara: string,
+  responderPara?: string,
 ): Promise<ResultadoEnvio> {
-  const { Resend } = await import('resend');
+  const { Resend } =
+    await import('resend');
 
-  const resend = new Resend(exigir('RESEND_API_KEY'));
+  const resend =
+    new Resend(
+      exigir(
+        'RESEND_API_KEY',
+      ),
+    );
 
-  const caminhoLogo = obterCaminhoLogo();
+  const caminhoLogo =
+    obterCaminhoLogo();
 
-  const fs = await import('node:fs/promises');
-  const logo = await fs.readFile(caminhoLogo);
+  const fs =
+    await import(
+      'node:fs/promises'
+    );
 
-  const anexoLogo: AnexoResend = {
-    filename: 'logo-ferrasoldas.png',
-    content: logo.toString('base64'),
-    contentType: 'image/png',
-    contentId: LOGO_CID,
-  };
+  const logo =
+    await fs.readFile(
+      caminhoLogo,
+    );
 
-  const { data, error } = await resend.emails.send({
-    from: exigir('EMAIL_REMETENTE'),
-    to: exigir('EMAIL_DESTINO'),
-    replyTo: responderPara,
-    subject: assunto,
-    html,
-    text: texto,
-    attachments: [anexoLogo],
-  });
+  const anexoLogo: AnexoResend =
+    {
+      filename:
+        'logo-ferrasoldas.png',
+
+      content:
+        logo.toString(
+          'base64',
+        ),
+
+      contentType:
+        'image/png',
+
+      contentId:
+        LOGO_CID,
+    };
+
+  const { data, error } =
+    await resend.emails.send(
+      {
+        from: exigir(
+          'EMAIL_REMETENTE',
+        ),
+
+        to: exigir(
+          'EMAIL_DESTINO',
+        ),
+
+        ...(responderPara
+          ? {
+              replyTo:
+                responderPara,
+            }
+          : {}),
+
+        subject: assunto,
+
+        html,
+
+        text: texto,
+
+        attachments: [
+          anexoLogo,
+        ],
+      },
+    );
 
   if (error) {
     return {
@@ -936,42 +1729,80 @@ async function enviarComResend(
   };
 }
 
+/**
+ * =========================================================
+ * SMTP
+ * =========================================================
+ */
+
 async function enviarComSmtp(
   assunto: string,
   html: string,
   texto: string,
-  responderPara: string,
+  responderPara?: string,
 ): Promise<ResultadoEnvio> {
-  const transporte = nodemailer.createTransport({
-    host: exigir('SMTP_HOST'),
+  const transporte =
+    nodemailer.createTransport(
+      {
+        host: exigir(
+          'SMTP_HOST',
+        ),
 
-    port: Number(
-      process.env.SMTP_PORTA ?? 465,
-    ),
+        port: Number(
+          process.env
+            .SMTP_PORTA ??
+            465,
+        ),
 
-    secure:
-      process.env.SMTP_SEGURO
-        ? process.env.SMTP_SEGURO === 'true'
-        : true,
+        secure:
+          process.env
+            .SMTP_SEGURO
+            ? process.env
+                .SMTP_SEGURO ===
+              'true'
+            : true,
 
-    auth: {
-      user: exigir('SMTP_USUARIO'),
-      pass: exigir('SMTP_SENHA'),
-    },
-  });
+        auth: {
+          user: exigir(
+            'SMTP_USUARIO',
+          ),
 
-  const info = await transporte.sendMail({
-    from: exigir('EMAIL_REMETENTE'),
-    to: exigir('EMAIL_DESTINO'),
-    replyTo: responderPara,
-    subject: assunto,
-    text: texto,
-    html,
+          pass: exigir(
+            'SMTP_SENHA',
+          ),
+        },
+      },
+    );
 
-    attachments: [
-      obterAnexoLogoNodemailer(),
-    ],
-  });
+  const info =
+    await transporte.sendMail(
+      {
+        from: exigir(
+          'EMAIL_REMETENTE',
+        ),
+
+        to: exigir(
+          'EMAIL_DESTINO',
+        ),
+
+        ...(responderPara
+          ? {
+              replyTo:
+                responderPara,
+            }
+          : {}),
+
+        subject: assunto,
+
+        text: texto,
+
+        html,
+
+        attachments: [
+          obterAnexoLogoNodemailer(),
+        ],
+      },
+    );
 
   return {
     ok: true,
@@ -979,24 +1810,56 @@ async function enviarComSmtp(
   };
 }
 
+/**
+ * =========================================================
+ * ENVIO PRINCIPAL
+ * =========================================================
+ */
+
 export async function enviarCadastro(
   dados: DadosCadastro,
 ): Promise<ResultadoEnvio> {
-  const assunto = montarAssunto(dados);
-  const html = montarHtml(dados);
-  const texto = montarTextoSimples(dados);
+  const assunto =
+    montarAssunto(
+      dados,
+    );
+
+  const html =
+    montarHtml(
+      dados,
+    );
+
+  const texto =
+    montarTextoSimples(
+      dados,
+    );
 
   const provedor = (
-    process.env.EMAIL_PROVEDOR ?? 'smtp'
+    process.env
+      .EMAIL_PROVEDOR ??
+    'smtp'
   ).toLowerCase();
 
+  /**
+   * Para Mercado Livre, normalmente
+   * não haverá e-mail.
+   *
+   * Nesse caso não enviamos replyTo.
+   */
+  const responderPara =
+    obterEmail(dados) ||
+    undefined;
+
   try {
-    if (provedor === 'resend') {
+    if (
+      provedor ===
+      'resend'
+    ) {
       return await enviarComResend(
         assunto,
         html,
         texto,
-        dados.email,
+        responderPara,
       );
     }
 
@@ -1004,11 +1867,12 @@ export async function enviarCadastro(
       assunto,
       html,
       texto,
-      dados.email,
+      responderPara,
     );
   } catch (erro) {
     return {
       ok: false,
+
       erro:
         erro instanceof Error
           ? erro.message

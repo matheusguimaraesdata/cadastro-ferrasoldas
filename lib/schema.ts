@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import {
   limparDocumento,
   validarCep,
@@ -53,21 +54,28 @@ const referenciaSchema = z.object({
   empresa: z
     .string()
     .trim()
-    .min(2, 'Informe a empresa da referência.')
-    .max(150),
+    .max(150)
+    .optional()
+    .or(z.literal('')),
 
   telefone: z
     .string()
     .trim()
-    .refine(
-      validarTelefone,
-      'Telefone inválido. Use (31) 99999-9999.',
-    ),
+    .optional()
+    .or(z.literal('')),
 });
 
 export const schemaCadastro = z
   .object({
-    tipoPessoa: z.enum(['PF', 'PJ']),
+    tipoCadastro: z.enum([
+      'PJ',
+      'PF',
+      'MERCADO_LIVRE',
+    ]),
+
+    tipoPessoa: z
+      .enum(['PF', 'PJ'])
+      .default('PJ'),
 
     razaoSocial: z
       .string()
@@ -97,7 +105,9 @@ export const schemaCadastro = z
       .optional()
       .or(z.literal(''))
       .default('')
-      .transform((v) => v.replace(/\D/g, '')),
+      .transform((valor) =>
+        valor.replace(/\D/g, ''),
+      ),
 
     rg: z
       .string()
@@ -113,24 +123,58 @@ export const schemaCadastro = z
       .optional()
       .or(z.literal('')),
 
+    mercadoLivreNome: z
+      .string()
+      .trim()
+      .max(150)
+      .optional()
+      .or(z.literal('')),
+
+    mercadoLivreCpf: z
+      .string()
+      .trim()
+      .optional()
+      .or(z.literal(''))
+      .default('')
+      .transform((valor) =>
+        valor.replace(/\D/g, ''),
+      ),
+
+    mercadoLivreQuemRecebe: z
+      .string()
+      .trim()
+      .max(150)
+      .optional()
+      .or(z.literal('')),
+
+    mercadoLivreReferencia: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .or(z.literal('')),
+
     email: z
       .string()
       .trim()
       .email('E-mail inválido.')
-      .max(254),
+      .max(254)
+      .optional()
+      .or(z.literal('')),
 
     telefone: z
       .string()
       .trim()
-      .refine(
-        validarTelefone,
-        'Telefone inválido. Use (31) 99999-9999.',
-      ),
+      .optional()
+      .or(z.literal('')),
 
     cep: z
       .string()
       .trim()
-      .refine(validarCep, 'CEP deve ter 8 dígitos.'),
+      .refine(
+        validarCep,
+        'CEP deve ter 8 dígitos.',
+      ),
 
     endereco: z
       .string()
@@ -157,20 +201,22 @@ export const schemaCadastro = z
       .min(2, 'Informe o bairro.')
       .max(100),
 
-    estado: z.string().length(2, 'Selecione o estado.'),
+    estado: z
+      .string()
+      .length(
+        2,
+        'Selecione o estado.',
+      ),
 
     cidade: z
       .string()
       .trim()
-      .min(2, 'Selecione o município.')
+      .min(
+        2,
+        'Selecione o município.',
+      )
       .max(100),
 
-    /*
-     * O formulário começa com vendedor = ''.
-     * Por isso o schema precisa aceitar '' durante a entrada.
-     * O superRefine abaixo impede que o cadastro seja enviado
-     * sem um vendedor selecionado.
-     */
     vendedor: z.union([
       z.enum(VENDEDORES),
       z.literal(''),
@@ -179,12 +225,17 @@ export const schemaCadastro = z
     valorVenda: z
       .string()
       .trim()
-      .min(1, 'Informe o valor da venda.'),
+      .min(
+        1,
+        'Informe o valor da venda.',
+      ),
 
     referenciasComerciais: z
       .array(referenciaSchema)
-      .min(3, 'Informe pelo menos 3 referências.')
-      .max(6, 'O limite é de 6 referências.'),
+      .max(
+        6,
+        'O limite é de 6 referências.',
+      ),
 
     website: z
       .string()
@@ -193,20 +244,82 @@ export const schemaCadastro = z
       .or(z.literal('')),
   })
   .superRefine((dados, ctx) => {
-    if (!dados.vendedor) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['vendedor'],
-        message: 'Selecione o vendedor responsável.',
-      });
+    /*
+     * MERCADO LIVRE
+     */
+    if (
+      dados.tipoCadastro ===
+      'MERCADO_LIVRE'
+    ) {
+      if (
+        !dados.mercadoLivreNome ||
+        dados.mercadoLivreNome.length < 3
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['mercadoLivreNome'],
+          message:
+            'Informe o nome do comprador.',
+        });
+      }
+
+      if (
+        !validarCpf(
+          dados.mercadoLivreCpf,
+        )
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['mercadoLivreCpf'],
+          message: 'CPF inválido.',
+        });
+      }
+
+      if (
+        !dados.mercadoLivreQuemRecebe ||
+        dados.mercadoLivreQuemRecebe.length <
+          3
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [
+            'mercadoLivreQuemRecebe',
+          ],
+          message:
+            'Informe quem receberá o pedido.',
+        });
+      }
+
+      if (
+        !dados.mercadoLivreReferencia
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [
+            'mercadoLivreReferencia',
+          ],
+          message:
+            'Informe uma referência para o endereço.',
+        });
+      }
     }
 
-    if (dados.tipoPessoa === 'PJ') {
-      if (!dados.razaoSocial || dados.razaoSocial.length < 3) {
+    /*
+     * PESSOA JURÍDICA
+     */
+    if (
+      dados.tipoCadastro ===
+      'PJ'
+    ) {
+      if (
+        !dados.razaoSocial ||
+        dados.razaoSocial.length < 3
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['razaoSocial'],
-          message: 'Informe a razão social.',
+          message:
+            'Informe a razão social.',
         });
       }
 
@@ -221,16 +334,31 @@ export const schemaCadastro = z
       if (!dados.inscricaoEstadual) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ['inscricaoEstadual'],
-          message: 'Informe a inscrição estadual ou ISENTO.',
+          path: [
+            'inscricaoEstadual',
+          ],
+          message:
+            'Informe a inscrição estadual ou ISENTO.',
         });
       }
-    } else {
-      if (!dados.nome || dados.nome.length < 3) {
+    }
+
+    /*
+     * PESSOA FÍSICA
+     */
+    if (
+      dados.tipoCadastro ===
+      'PF'
+    ) {
+      if (
+        !dados.nome ||
+        dados.nome.length < 3
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['nome'],
-          message: 'Informe o nome completo.',
+          message:
+            'Informe o nome completo.',
         });
       }
 
@@ -250,18 +378,147 @@ export const schemaCadastro = z
         });
       }
     }
+
+    /*
+     * E-MAIL E TELEFONE
+     *
+     * Mercado Livre não exige esses dados.
+     */
+    if (
+      dados.tipoCadastro !==
+      'MERCADO_LIVRE'
+    ) {
+      if (!dados.email) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['email'],
+          message:
+            'Informe o e-mail.',
+        });
+      }
+
+      if (
+        !validarTelefone(
+          dados.telefone ?? '',
+        )
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['telefone'],
+          message:
+            'Telefone inválido. Use (31) 99999-9999.',
+        });
+      }
+    }
+
+    /*
+     * VENDEDOR
+     */
+    if (!dados.vendedor) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['vendedor'],
+        message:
+          'Selecione o vendedor responsável.',
+      });
+    }
+
+    /*
+     * REFERÊNCIAS COMERCIAIS
+     *
+     * PJ e PF exigem pelo menos 3.
+     * Mercado Livre não exige referências.
+     */
+    if (
+      dados.tipoCadastro !==
+        'MERCADO_LIVRE' &&
+      dados.referenciasComerciais.length <
+        3
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [
+          'referenciasComerciais',
+        ],
+        message:
+          'Informe pelo menos 3 referências.',
+      });
+    }
+
+    /*
+     * VALIDAÇÃO DOS CAMPOS DAS REFERÊNCIAS
+     *
+     * Os campos são opcionais na estrutura base
+     * para permitir Mercado Livre, mas são
+     * obrigatórios para PJ/PF.
+     */
+    if (
+      dados.tipoCadastro !==
+      'MERCADO_LIVRE'
+    ) {
+      dados.referenciasComerciais.forEach(
+        (referencia, index) => {
+          if (
+            !referencia.empresa ||
+            referencia.empresa.length < 2
+          ) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [
+                'referenciasComerciais',
+                index,
+                'empresa',
+              ],
+              message:
+                'Informe o nome da empresa.',
+            });
+          }
+
+          if (
+            !validarTelefone(
+              referencia.telefone ?? '',
+            )
+          ) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [
+                'referenciasComerciais',
+                index,
+                'telefone',
+              ],
+              message:
+                'Telefone inválido.',
+            });
+          }
+        },
+      );
+    }
   });
 
-export type DadosCadastro = z.infer<typeof schemaCadastro>;
+export type DadosCadastro =
+  z.infer<typeof schemaCadastro>;
 
-export const ROTULOS: Record<string, string> = {
+export const ROTULOS: Record<
+  string,
+  string
+> = {
+  tipoCadastro: 'Tipo de cadastro',
   tipoPessoa: 'Tipo de pessoa',
   razaoSocial: 'Razão Social',
   nome: 'Nome completo',
   cnpj: 'CNPJ',
   cpf: 'CPF',
   rg: 'RG',
-  inscricaoEstadual: 'Inscrição Estadual',
+  inscricaoEstadual:
+    'Inscrição Estadual',
+  mercadoLivreNome:
+    'Nome do comprador',
+  mercadoLivreCpf:
+    'CPF do comprador',
+  mercadoLivreQuemRecebe:
+    'Quem recebe',
+  mercadoLivreReferencia:
+    'Referência do endereço',
   email: 'E-mail',
   telefone: 'Telefone',
   cep: 'CEP',
