@@ -17,7 +17,7 @@ export const VENDEDORES = [
   'Anderson Lopes',
   'Marcos Paulo',
   'Ezequiel Lopes',
-  'Mercado Livre'
+  'Mercado Livre',
   'Ferrasoldas',
 ] as const;
 
