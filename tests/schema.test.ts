@@ -4,7 +4,9 @@ import { schemaCadastro } from '@/lib/schema';
 const referencias = (quantidade: number) =>
   Array.from({ length: quantidade }, (_, i) => ({
     empresa: `Referencia ${i + 1}`,
-    telefone: `(31) 3333-${String(1000 + i).slice(-4)}`,
+    telefone: `(31) 3333-${String(
+      1000 + i,
+    ).slice(-4)}`,
   }));
 
 const basePJ = {
@@ -13,6 +15,8 @@ const basePJ = {
   razaoSocial: 'Metalurgica Exemplo Ltda',
   cnpj: '11.222.333/0001-81',
   inscricaoEstadual: 'ISENTO',
+  situacaoContribuinte:
+    'CONTRIBUINTE' as const,
   nome: '',
   cpf: '',
   rg: '',
@@ -29,7 +33,8 @@ const basePJ = {
   bairro: 'Centro',
   cidade: 'Contagem',
   estado: 'MG',
-  vendedor: 'Leonardo Ferreira' as const,
+  vendedor:
+    'Leonardo Ferreira' as const,
   valorVenda: 'R$ 12.500,00',
   referenciasComerciais: referencias(3),
   website: '',
@@ -42,6 +47,7 @@ const basePF = {
   razaoSocial: '',
   cnpj: '',
   inscricaoEstadual: '',
+  situacaoContribuinte: '' as const,
   nome: 'Joao da Silva',
   cpf: '529.982.247-25',
   rg: 'MG-12.345.678',
@@ -49,31 +55,29 @@ const basePF = {
 
 const baseMercadoLivre = {
   ...basePJ,
-  tipoCadastro: 'MERCADO_LIVRE' as const,
+  tipoCadastro:
+    'MERCADO_LIVRE' as const,
   tipoPessoa: 'PF' as const,
-
+  mercadoLivreTipoPessoa:
+    'PF' as const,
+  vendedor: 'Mercado Livre' as const,
   razaoSocial: '',
   nome: '',
   cnpj: '',
   cpf: '',
   rg: '',
   inscricaoEstadual: '',
-
+  situacaoContribuinte: '' as const,
   mercadoLivreNome:
     'Nauber de Jesus Sousa Frazao',
-
   mercadoLivreCpf:
     '529.982.247-25',
-
   mercadoLivreQuemRecebe:
     'Jose de Ribamar dos Santos Araujo',
-
   mercadoLivreReferencia:
     'Na casa do Riba tocador',
-
   email: '',
   telefone: '',
-
   referenciasComerciais: [],
 };
 
@@ -89,8 +93,7 @@ function erroDe(
   }
 
   return resultado.error.issues.find(
-    (issue) =>
-      issue.path[0] === campo,
+    (issue) => issue.path[0] === campo,
   )?.message;
 }
 
@@ -112,9 +115,7 @@ describe(
         if (resultado.success) {
           expect(
             resultado.data.cnpj,
-          ).toBe(
-            '11222333000181',
-          );
+          ).toBe('11222333000181');
         }
       },
     );
@@ -125,8 +126,7 @@ describe(
         const resultado =
           schemaCadastro.safeParse({
             ...basePJ,
-            cnpj:
-              '12.ABC.345/01DE-35',
+            cnpj: '12.ABC.345/01DE-35',
           });
 
         expect(
@@ -136,9 +136,7 @@ describe(
         if (resultado.success) {
           expect(
             resultado.data.cnpj,
-          ).toBe(
-            '12ABC34501DE35',
-          );
+          ).toBe('12ABC34501DE35');
         }
       },
     );
@@ -150,8 +148,7 @@ describe(
           erroDe(
             {
               ...basePJ,
-              cnpj:
-                '11.222.333/0001-80',
+              cnpj: '11.222.333/0001-80',
             },
             'cnpj',
           ),
@@ -159,40 +156,80 @@ describe(
       },
     );
 
+    it('exige razão social', () => {
+      expect(
+        erroDe(
+          {
+            ...basePJ,
+            razaoSocial: '',
+          },
+          'razaoSocial',
+        ),
+      ).toBeTruthy();
+    });
+
     it(
-      'exige razão social',
+      'exige a situação do contribuinte',
       () => {
         expect(
           erroDe(
             {
               ...basePJ,
-              razaoSocial: '',
+              situacaoContribuinte: '',
             },
-            'razaoSocial',
+            'situacaoContribuinte',
           ),
         ).toBeTruthy();
       },
     );
 
     it(
-      'exige inscrição estadual (aceita ISENTO)',
+      'permite inscrição estadual vazia para contribuinte',
       () => {
-        expect(
-          erroDe(
-            {
-              ...basePJ,
-              inscricaoEstadual: '',
-            },
-            'inscricaoEstadual',
-          ),
-        ).toBeTruthy();
-
-        expect(
+        const resultado =
           schemaCadastro.safeParse({
             ...basePJ,
-            inscricaoEstadual:
-              'ISENTO',
-          }).success,
+            situacaoContribuinte:
+              'CONTRIBUINTE' as const,
+            inscricaoEstadual: '',
+          });
+
+        expect(
+          resultado.success,
+        ).toBe(true);
+      },
+    );
+
+    it(
+      'permite inscrição estadual vazia para não contribuinte',
+      () => {
+        const resultado =
+          schemaCadastro.safeParse({
+            ...basePJ,
+            situacaoContribuinte:
+              'NAO_CONTRIBUINTE' as const,
+            inscricaoEstadual: '',
+          });
+
+        expect(
+          resultado.success,
+        ).toBe(true);
+      },
+    );
+
+    it(
+      'aceita ISENTO como inscrição estadual',
+      () => {
+        const resultado =
+          schemaCadastro.safeParse({
+            ...basePJ,
+            situacaoContribuinte:
+              'CONTRIBUINTE' as const,
+            inscricaoEstadual: 'ISENTO',
+          });
+
+        expect(
+          resultado.success,
         ).toBe(true);
       },
     );
@@ -217,9 +254,7 @@ describe(
         if (resultado.success) {
           expect(
             resultado.data.cpf,
-          ).toBe(
-            '52998224725',
-          );
+          ).toBe('52998224725');
         }
       },
     );
@@ -231,8 +266,7 @@ describe(
           erroDe(
             {
               ...basePF,
-              cpf:
-                '111.111.111-11',
+              cpf: '111.111.111-11',
             },
             'cpf',
           ),
@@ -240,35 +274,29 @@ describe(
       },
     );
 
-    it(
-      'exige nome completo',
-      () => {
-        expect(
-          erroDe(
-            {
-              ...basePF,
-              nome: '',
-            },
-            'nome',
-          ),
-        ).toBeTruthy();
-      },
-    );
+    it('exige nome completo', () => {
+      expect(
+        erroDe(
+          {
+            ...basePF,
+            nome: '',
+          },
+          'nome',
+        ),
+      ).toBeTruthy();
+    });
 
-    it(
-      'exige RG para pessoa física',
-      () => {
-        expect(
-          erroDe(
-            {
-              ...basePF,
-              rg: '',
-            },
-            'rg',
-          ),
-        ).toBeTruthy();
-      },
-    );
+    it('exige RG para pessoa física', () => {
+      expect(
+        erroDe(
+          {
+            ...basePF,
+            rg: '',
+          },
+          'rg',
+        ),
+      ).toBeTruthy();
+    });
   },
 );
 
@@ -290,19 +318,31 @@ describe(
     );
 
     it(
-      'exige nome do comprador',
+      'exige o tipo de pessoa do Mercado Livre',
       () => {
         expect(
           erroDe(
             {
               ...baseMercadoLivre,
-              mercadoLivreNome: '',
+              mercadoLivreTipoPessoa: '',
             },
-            'mercadoLivreNome',
+            'mercadoLivreTipoPessoa',
           ),
         ).toBeTruthy();
       },
     );
+
+    it('exige nome do comprador', () => {
+      expect(
+        erroDe(
+          {
+            ...baseMercadoLivre,
+            mercadoLivreNome: '',
+          },
+          'mercadoLivreNome',
+        ),
+      ).toBeTruthy();
+    });
 
     it(
       'exige CPF válido do comprador',
@@ -360,8 +400,7 @@ describe(
             ...baseMercadoLivre,
             email: '',
             telefone: '',
-            referenciasComerciais:
-              [],
+            referenciasComerciais: [],
           });
 
         expect(
@@ -375,20 +414,17 @@ describe(
 describe(
   'schemaCadastro — campos comuns',
   () => {
-    it(
-      'exige o vendedor',
-      () => {
-        expect(
-          erroDe(
-            {
-              ...basePJ,
-              vendedor: '',
-            },
-            'vendedor',
-          ),
-        ).toBeTruthy();
-      },
-    );
+    it('exige o vendedor', () => {
+      expect(
+        erroDe(
+          {
+            ...basePJ,
+            vendedor: '',
+          },
+          'vendedor',
+        ),
+      ).toBeTruthy();
+    });
 
     it(
       'recusa CEP fora do padrão',
@@ -457,8 +493,7 @@ describe(
           erroDe(
             {
               ...basePJ,
-              website:
-                'http://spam',
+              website: 'http://spam',
             },
             'website',
           ),
@@ -495,25 +530,20 @@ describe(
 
           expect(
             erro?.message,
-          ).toMatch(
-            /pelo menos 3/i,
-          );
+          ).toMatch(/pelo menos 3/i);
         }
       },
     );
 
-    it(
-      'aceita até 6 referências',
-      () => {
-        expect(
-          schemaCadastro.safeParse({
-            ...basePJ,
-            referenciasComerciais:
-              referencias(6),
-          }).success,
-        ).toBe(true);
-      },
-    );
+    it('aceita até 6 referências', () => {
+      expect(
+        schemaCadastro.safeParse({
+          ...basePJ,
+          referenciasComerciais:
+            referencias(6),
+        }).success,
+      ).toBe(true);
+    });
 
     it(
       'recusa mais de 6 referências',
@@ -539,9 +569,7 @@ describe(
 
           expect(
             erro?.message,
-          ).toMatch(
-            /limite é de 6/i,
-          );
+          ).toMatch(/limite é de 6/i);
         }
       },
     );
@@ -549,16 +577,14 @@ describe(
     it(
       'recusa referência sem nome da empresa',
       () => {
-        const refs =
-          referencias(3);
+        const refs = referencias(3);
 
         refs[0].empresa = '';
 
         const resultado =
           schemaCadastro.safeParse({
             ...basePJ,
-            referenciasComerciais:
-              refs,
+            referenciasComerciais: refs,
           });
 
         expect(
@@ -572,13 +598,10 @@ describe(
                 issue.path[0] ===
                   'referenciasComerciais' &&
                 issue.path[1] === 0 &&
-                issue.path[2] ===
-                  'empresa',
+                issue.path[2] === 'empresa',
             );
 
-          expect(
-            erro,
-          ).toBeTruthy();
+          expect(erro).toBeTruthy();
         }
       },
     );
@@ -586,16 +609,14 @@ describe(
     it(
       'recusa referência com telefone inválido',
       () => {
-        const refs =
-          referencias(3);
+        const refs = referencias(3);
 
         refs[1].telefone = '123';
 
         const resultado =
           schemaCadastro.safeParse({
             ...basePJ,
-            referenciasComerciais:
-              refs,
+            referenciasComerciais: refs,
           });
 
         expect(
@@ -609,13 +630,10 @@ describe(
                 issue.path[0] ===
                   'referenciasComerciais' &&
                 issue.path[1] === 1 &&
-                issue.path[2] ===
-                  'telefone',
+                issue.path[2] === 'telefone',
             );
 
-          expect(
-            erro,
-          ).toBeTruthy();
+          expect(erro).toBeTruthy();
         }
       },
     );
@@ -626,8 +644,7 @@ describe(
         const resultado =
           schemaCadastro.safeParse({
             ...baseMercadoLivre,
-            referenciasComerciais:
-              [],
+            referenciasComerciais: [],
           });
 
         expect(

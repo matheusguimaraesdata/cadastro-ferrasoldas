@@ -104,17 +104,6 @@ img {
    LOGO ORIGINAL DA FERRASOLDAS
    ========================================================= */
 
-/*
- * A logo NÃO é recriada com CSS.
- *
- * O arquivo original deve estar em:
- *
- * public/logo-ferrasoldas.png
- *
- * Aqui controlamos somente tamanho, posicionamento
- * e responsividade.
- */
-
 .logo-ferrasoldas {
   width: 25%;
   display: flex;
@@ -310,12 +299,17 @@ img {
 
 .tipo-pessoa {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 
   gap: 12px;
 
   margin-bottom: 8px;
 }
+
+.tipo-pessoa--mercado-livre {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 
 .tipo-pessoa__opcao {
   display: flex;

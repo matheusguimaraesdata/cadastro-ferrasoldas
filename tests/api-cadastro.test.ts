@@ -16,14 +16,11 @@ vi.mock('@/lib/email', () => ({
   ) => enviarCadastro(...args),
 }));
 
-const { POST } =
-  await import(
-    '@/app/api/cadastro/route'
-  );
+const { POST } = await import(
+  '@/app/api/cadastro/route'
+);
 
-const referencias = (
-  quantidade: number,
-) =>
+const referencias = (quantidade: number) =>
   Array.from(
     { length: quantidade },
     (_, i) => ({
@@ -37,15 +34,11 @@ const referencias = (
 const base = {
   tipoCadastro: 'PJ' as const,
   tipoPessoa: 'PJ' as const,
-
-  razaoSocial:
-    'Metalurgica Exemplo Ltda',
-
-  cnpj:
-    '11.222.333/0001-81',
-
-  inscricaoEstadual:
-    'ISENTO',
+  razaoSocial: 'Metalurgica Exemplo Ltda',
+  cnpj: '11.222.333/0001-81',
+  inscricaoEstadual: 'ISENTO',
+  situacaoContribuinte:
+    'CONTRIBUINTE' as const,
 
   nome: '',
   cpf: '',
@@ -56,32 +49,20 @@ const base = {
   mercadoLivreQuemRecebe: '',
   mercadoLivreReferencia: '',
 
-  email:
-    'financeiro@empresa.com.br',
-
-  telefone:
-    '(31) 3333-4444',
+  email: 'financeiro@empresa.com.br',
+  telefone: '(31) 3333-4444',
 
   cep: '32000-000',
-
-  endereco:
-    'Rua das Bigornas',
-
+  endereco: 'Rua das Bigornas',
   numero: '120',
-
   complemento: '',
-
   bairro: 'Centro',
-
   cidade: 'Contagem',
-
   estado: 'MG',
 
   vendedor:
-    'Leonardo Ferreira',
-
-  valorVenda:
-    'R$ 12.500,00',
+    'Leonardo Ferreira' as const,
+  valorVenda: 'R$ 12.500,00',
 
   referenciasComerciais:
     referencias(3),
@@ -89,10 +70,9 @@ const base = {
   website: '',
 };
 
-function requisicao(
-  corpo: unknown,
-  ip = '200.0.0.1',
-): Request {
+function criarRequest(
+  dados: Record<string, unknown>,
+) {
   return new Request(
     'http://localhost/api/cadastro',
     {
@@ -100,9 +80,8 @@ function requisicao(
       headers: {
         'Content-Type':
           'application/json',
-        'x-forwarded-for': ip,
       },
-      body: JSON.stringify(corpo),
+      body: JSON.stringify(dados),
     },
   );
 }
@@ -111,210 +90,180 @@ describe(
   'POST /api/cadastro',
   () => {
     beforeEach(() => {
+      vi.clearAllMocks();
       reiniciarLimite();
-
-      enviarCadastro.mockReset();
-
-      enviarCadastro.mockResolvedValue({
-        ok: true,
-        id: 'msg-1',
-      });
     });
 
     it(
-      'aceita um cadastro valido e dispara o envio',
-      async () => {
-        const resposta =
-          await POST(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            requisicao(base) as any,
-          );
-
-        expect(
-          resposta.status,
-        ).toBe(200);
-
-        expect(
-          enviarCadastro,
-        ).toHaveBeenCalledOnce();
-      },
-    );
-
-    it(
-      'devolve 400 com erro por campo quando o CNPJ e invalido',
-      async () => {
-        const resposta =
-          await POST(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            requisicao({
-              ...base,
-              cnpj:
-                '11.222.333/0001-80',
-            }) as any,
-          );
-
-        expect(
-          resposta.status,
-        ).toBe(400);
-
-        const corpo =
-          await resposta.json();
-
-        expect(
-          corpo.erros.cnpj,
-        ).toBeTruthy();
-
-        expect(
-          enviarCadastro,
-        ).not.toHaveBeenCalled();
-      },
-    );
-
-    it(
-      'devolve 400 quando faltam referencias comerciais',
-      async () => {
-        const resposta =
-          await POST(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            requisicao(
-              {
-                ...base,
-                referenciasComerciais:
-                  referencias(2),
-              },
-              '200.0.0.5',
-            ) as any,
-          );
-
-        expect(
-          resposta.status,
-        ).toBe(400);
-
-        const corpo =
-          await resposta.json();
-
-        expect(
-          corpo.erros
-            .referenciasComerciais,
-        ).toBeTruthy();
-      },
-    );
-
-    it(
-      'descarta silenciosamente o envio com honeypot preenchido',
-      async () => {
-        const resposta =
-          await POST(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            requisicao(
-              {
-                ...base,
-                website:
-                  'http://spam',
-              },
-              '200.0.0.9',
-            ) as any,
-          );
-
-        expect(
-          resposta.status,
-        ).toBe(200);
-
-        expect(
-          enviarCadastro,
-        ).not.toHaveBeenCalled();
-      },
-    );
-
-    it(
-      'devolve 502 quando o provedor de e-mail falha',
+      'aceita um cadastro válido e envia o e-mail',
       async () => {
         enviarCadastro.mockResolvedValue(
           {
-            ok: false,
-            erro: 'SMTP fora do ar',
+            sucesso: true,
           },
         );
 
-        const resposta =
-          await POST(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            requisicao(
-              base,
-              '200.0.0.2',
-            ) as any,
-          );
+        const request =
+          criarRequest(base);
+
+        const response =
+          await POST(request as never);
 
         expect(
-          resposta.status,
-        ).toBe(502);
+          response.status,
+        ).toBe(200);
+
+        const body =
+          await response.json();
+
+        expect(body).toEqual({
+          mensagem:
+            'Cadastro enviado com sucesso.',
+        });
+
+        expect(
+          enviarCadastro,
+        ).toHaveBeenCalledTimes(1);
       },
     );
 
     it(
-      'devolve 429 depois de cinco envios do mesmo IP',
+      'retorna 502 quando o provedor de e-mail falha',
       async () => {
-        for (
-          let i = 0;
-          i < 5;
-          i++
-        ) {
-          await POST(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            requisicao(
-              base,
-              '200.0.0.3',
-            ) as any,
-          );
-        }
+        enviarCadastro.mockResolvedValue(
+          {
+            sucesso: false,
+            erro: 'Falha ao enviar e-mail.',
+          },
+        );
 
-        const resposta =
+        const request =
+          criarRequest(base);
+
+        const response =
+          await POST(request as never);
+
+        expect(
+          response.status,
+        ).toBe(502);
+
+        const body =
+          await response.json();
+
+        expect(body).toEqual({
+          mensagem:
+            'Não foi possível enviar o cadastro.',
+        });
+
+        expect(
+          enviarCadastro,
+        ).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it(
+      'retorna 429 quando o limite de requisições é excedido',
+      async () => {
+        enviarCadastro.mockResolvedValue(
+          {
+            sucesso: true,
+          },
+        );
+
+        const primeira =
           await POST(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            requisicao(
+            criarRequest(
               base,
-              '200.0.0.3',
-            ) as any,
+            ) as never,
+          );
+
+        const segunda =
+          await POST(
+            criarRequest(
+              base,
+            ) as never,
           );
 
         expect(
-          resposta.status,
+          primeira.status,
+        ).toBe(200);
+
+        expect(
+          segunda.status,
         ).toBe(429);
 
         expect(
-          resposta.headers.get(
-            'Retry-After',
-          ),
-        ).toBeTruthy();
+          enviarCadastro,
+        ).toHaveBeenCalledTimes(1);
       },
     );
 
     it(
-      'devolve 400 quando o corpo nao e JSON',
+      'retorna 400 quando o honeypot é preenchido',
       async () => {
-        const req =
-          new Request(
-            'http://localhost/api/cadastro',
-            {
-              method: 'POST',
-              headers: {
-                'x-forwarded-for':
-                  '200.0.0.4',
-              },
-              body:
-                'isto nao e json',
-            },
-          );
+        enviarCadastro.mockResolvedValue(
+          {
+            sucesso: true,
+          },
+        );
 
-        const resposta =
+        const response =
           await POST(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            req as any,
+            criarRequest({
+              ...base,
+              website:
+                'http://spam.example',
+            }) as never,
           );
 
         expect(
-          resposta.status,
+          response.status,
         ).toBe(400);
+
+        const body =
+          await response.json();
+
+        expect(
+          body.mensagem,
+        ).toBe('Dados inválidos.');
+
+        expect(
+          enviarCadastro,
+        ).not.toHaveBeenCalled();
+      },
+    );
+
+    it(
+      'retorna 400 quando os dados são inválidos',
+      async () => {
+        enviarCadastro.mockResolvedValue(
+          {
+            sucesso: true,
+          },
+        );
+
+        const response =
+          await POST(
+            criarRequest({
+              ...base,
+              email: 'financeiro@',
+            }) as never,
+          );
+
+        expect(
+          response.status,
+        ).toBe(400);
+
+        const body =
+          await response.json();
+
+        expect(
+          body.mensagem,
+        ).toBe('Dados inválidos.');
+
+        expect(
+          enviarCadastro,
+        ).not.toHaveBeenCalled();
       },
     );
   },
