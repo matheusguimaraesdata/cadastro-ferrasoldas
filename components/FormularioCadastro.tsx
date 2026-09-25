@@ -650,7 +650,7 @@ export default function FormularioCadastro() {
                 <div className="referencias__cabecalho">
                   <div>
                     <h3>Referências comerciais</h3>
-                    <p>Informe exatamente 3 referências comerciais.</p>
+                    <p>Informe 3 referências comerciais.</p>
                   </div>
                   <span>3/3</span>
                 </div>
