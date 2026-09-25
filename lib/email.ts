@@ -173,17 +173,15 @@ export function montarTextoSimples(dados: DadosCadastro): string {
     '========================================',
     `CEP: ${dados.cep}`,
     `Rua / Logradouro: ${dados.endereco}`,
+    `Número: ${dados.numero}`,
+    `Bairro: ${dados.bairro}`,
+    ...(dados.complemento ? [`Complemento: ${dados.complemento}`] : []),
     `Município: ${dados.cidade}`,
     `Estado: ${dados.estado}`,
   );
 
   if (!ehMercadoLivre(dados)) {
     linhas.push(
-      `Número: ${dados.numero}`,
-      `Bairro: ${dados.bairro}`,
-      ...(dados.complemento
-        ? [`Complemento: ${dados.complemento}`]
-        : []),
       '',
       '========================================',
       'CONTATO',
@@ -300,19 +298,14 @@ export function montarHtml(dados: DadosCadastro): string {
   const endereco = [
     criarLinha('CEP', dados.cep),
     criarLinha('Rua / Logradouro', dados.endereco),
+    criarLinha('Número', dados.numero),
+    criarLinha('Bairro', dados.bairro),
+    ...(dados.complemento
+      ? [criarLinha('Complemento', dados.complemento)]
+      : []),
     criarLinha('Município', dados.cidade),
     criarLinha('Estado', dados.estado),
   ];
-
-  if (!mercadoLivre) {
-    endereco.push(
-      criarLinha('Número', dados.numero),
-      criarLinha('Bairro', dados.bairro),
-      ...(dados.complemento
-        ? [criarLinha('Complemento', dados.complemento)]
-        : []),
-    );
-  }
 
   const secoes = [
     criarSecao('Dados cadastrais', cadastrais.join('')),
