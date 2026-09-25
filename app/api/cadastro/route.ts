@@ -1,7 +1,4 @@
-import {
-  NextRequest,
-  NextResponse,
-} from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 import { enviarCadastro } from '@/lib/email';
 import { verificarLimite } from '@/lib/rate-limit';
@@ -10,30 +7,18 @@ import { schemaCadastro } from '@/lib/schema';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-function identificarOrigem(
-  req: NextRequest,
-): string {
-  const encaminhado =
-    req.headers.get('x-forwarded-for');
+function identificarOrigem(req: NextRequest): string {
+  const encaminhado = req.headers.get('x-forwarded-for');
 
   if (encaminhado) {
-    return encaminhado
-      .split(',')[0]
-      .trim();
+    return encaminhado.split(',')[0].trim();
   }
 
-  return (
-    req.headers.get('x-real-ip') ??
-    'desconhecido'
-  );
+  return req.headers.get('x-real-ip') ?? 'desconhecido';
 }
 
-export async function POST(
-  req: NextRequest,
-) {
-  const limite = verificarLimite(
-    identificarOrigem(req),
-  );
+export async function POST(req: NextRequest) {
+  const limite = verificarLimite(identificarOrigem(req));
 
   if (!limite.permitido) {
     return NextResponse.json(
@@ -45,9 +30,7 @@ export async function POST(
       {
         status: 429,
         headers: {
-          'Retry-After': String(
-            limite.segundosRestantes,
-          ),
+          'Retry-After': String(limite.segundosRestantes),
         },
       },
     );
@@ -60,8 +43,7 @@ export async function POST(
   } catch {
     return NextResponse.json(
       {
-        mensagem:
-          'Não foi possível ler os dados enviados.',
+        mensagem: 'Não foi possível ler os dados enviados.',
       },
       {
         status: 400,
@@ -86,20 +68,13 @@ export async function POST(
     );
   }
 
-  const resultado =
-    schemaCadastro.safeParse(corpo);
+  const resultado = schemaCadastro.safeParse(corpo);
 
   if (!resultado.success) {
-    const erros: Record<
-      string,
-      string
-    > = {};
+    const erros: Record<string, string> = {};
 
-    for (const problema of resultado.error
-      .issues) {
-      const campo = String(
-        problema.path[0] ?? 'formulario',
-      );
+    for (const problema of resultado.error.issues) {
+      const campo = String(problema.path[0] ?? 'formulario');
 
       if (!erros[campo]) {
         erros[campo] = problema.message;
@@ -117,20 +92,14 @@ export async function POST(
     );
   }
 
-  const envio = await enviarCadastro(
-    resultado.data,
-  );
+  const envio = await enviarCadastro(resultado.data);
 
   if (!envio.sucesso) {
-    console.error(
-      'Falha ao enviar cadastro:',
-      envio.erro,
-    );
+    console.error('Falha ao enviar cadastro:', envio.erro);
 
     return NextResponse.json(
       {
-        mensagem:
-          'Não foi possível enviar o cadastro.',
+        mensagem: 'Não foi possível enviar o cadastro.',
       },
       {
         status: 502,
@@ -140,8 +109,7 @@ export async function POST(
 
   return NextResponse.json(
     {
-      mensagem:
-        'Cadastro enviado com sucesso.',
+      mensagem: 'Cadastro enviado com sucesso.',
     },
     {
       status: 200,

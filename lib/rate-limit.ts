@@ -3,8 +3,10 @@ type Registro = {
   expiraEm: number;
 };
 
-const JANELA_MS = 10 * 60 * 1000;
-const MAXIMO_POR_JANELA = 1;
+// Configuração ajustada para uso corporativo/intensivo:
+// Permite até 50 envios por dia por IP (janela de 24 horas)
+const JANELA_MS = 24 * 60 * 60 * 1000; // 24 horas em milissegundos
+const MAXIMO_POR_JANELA = 50;           // 50 envios por dia
 
 const registros = new Map<string, Registro>();
 

@@ -62,9 +62,12 @@ function ehMercadoLivre(dados: DadosCadastro): boolean {
 
 function obterIdentificacao(dados: DadosCadastro): string {
   if (ehMercadoLivre(dados)) {
-    return dados.mercadoLivreTipoPessoa === 'PJ'
-      ? dados.razaoSocial || 'Empresa Mercado Livre'
-      : dados.nome || 'Cliente Mercado Livre';
+    return (
+      dados.mercadoLivreNome?.trim() ||
+      (dados.mercadoLivreTipoPessoa === 'PJ'
+        ? 'Empresa Mercado Livre'
+        : 'Cliente Mercado Livre')
+    );
   }
 
   return dados.tipoPessoa === 'PJ'
@@ -77,16 +80,18 @@ function obterDocumento(dados: DadosCadastro): {
   valor: string;
 } {
   if (ehMercadoLivre(dados)) {
+    const doc = dados.mercadoLivreCpf ?? '';
+
     if (dados.mercadoLivreTipoPessoa === 'PJ') {
       return {
         rotulo: 'CNPJ',
-        valor: formatarDocumento(dados.cnpj),
+        valor: formatarDocumento(doc),
       };
     }
 
     return {
       rotulo: 'CPF',
-      valor: formatarDocumento(dados.cpf),
+      valor: formatarDocumento(doc),
     };
   }
 

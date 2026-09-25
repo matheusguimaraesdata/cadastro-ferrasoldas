@@ -1,3 +1,5 @@
+// lib/schema.ts
+
 import { z } from 'zod';
 
 import {
@@ -44,7 +46,7 @@ export const ESTADOS_BRASIL = [
   { sigla: 'RO', nome: 'Rondônia' },
   { sigla: 'RR', nome: 'Roraima' },
   { sigla: 'SC', nome: 'Santa Catarina' },
-  { sigla: 'SP', nome: 'São Paulo'},
+  { sigla: 'SP', nome: 'São Paulo' },
   { sigla: 'SE', nome: 'Sergipe' },
   { sigla: 'TO', nome: 'Tocantins' },
 ] as const;
@@ -144,10 +146,6 @@ export const schemaCadastro = z
     mercadoLivreNome: campoTextoOpcional,
 
     mercadoLivreCpf: documentoCpf,
-
-    mercadoLivreQuemRecebe: campoTextoOpcional,
-
-    mercadoLivreReferencia: campoTextoOpcional,
 
     email: z
       .string()
@@ -272,30 +270,32 @@ export const schemaCadastro = z
             message: 'CNPJ inválido.',
           });
         }
-      }
 
-      if (
-        !dados.mercadoLivreQuemRecebe
-      ) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: [
-            'mercadoLivreQuemRecebe',
-          ],
-          message:
-            'Informe quem receberá o pedido.',
-        });
-      }
+        if (!dados.situacaoContribuinte) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [
+              'situacaoContribuinte',
+            ],
+            message:
+              'Selecione a situação do contribuinte.',
+          });
+        }
 
-      if (!dados.mercadoLivreReferencia) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: [
-            'mercadoLivreReferencia',
-          ],
-          message:
-            'Informe uma referência para o endereço.',
-        });
+        if (
+          dados.situacaoContribuinte ===
+            'CONTRIBUINTE' &&
+          !dados.inscricaoEstadual
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [
+              'inscricaoEstadual',
+            ],
+            message:
+              'Informe a Inscrição Estadual.',
+          });
+        }
       }
 
       if (!validarCep(dados.cep)) {
@@ -399,6 +399,21 @@ export const schemaCadastro = z
           ],
           message:
             'Selecione a situação do contribuinte.',
+        });
+      }
+
+      if (
+        dados.situacaoContribuinte ===
+          'CONTRIBUINTE' &&
+        !dados.inscricaoEstadual
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [
+            'inscricaoEstadual',
+          ],
+          message:
+            'Informe a Inscrição Estadual.',
         });
       }
     }
@@ -610,6 +625,10 @@ export const ROTULOS: Record<
   tipoPessoa: 'Tipo de pessoa',
   mercadoLivreTipoPessoa:
     'Cadastro Mercado Livre por',
+  mercadoLivreNome:
+    'Nome / Empresa Mercado Livre',
+  mercadoLivreCpf:
+    'CPF / CNPJ Mercado Livre',
   situacaoContribuinte:
     'Situação do contribuinte',
   razaoSocial:
